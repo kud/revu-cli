@@ -1,15 +1,30 @@
 {
   "name": "revu-cli",
+  "version": "0.1.0",
+  "description": "Interactive terminal diff reviewer",
   "module": "index.ts",
   "type": "module",
-  "private": true,
+  "bin": {
+    "revu": "./bin/revu.js"
+  },
+  "files": [
+    "bin/"
+  ],
   "scripts": {
     "dev": "bun --hot index.ts",
     "start": "bun index.ts",
-    "build": "bun build --compile --minify index.ts --outfile revu-bin"
+    "build": "bun build --compile --minify index.ts --outfile revu-bin",
+    "build:darwin-arm64": "bun build --compile --minify --target=bun-darwin-arm64 index.ts --outfile npm-packages/darwin-arm64/revu-bin",
+    "build:darwin-x64": "bun build --compile --minify --target=bun-darwin-x64 index.ts --outfile npm-packages/darwin-x64/revu-bin",
+    "build:linux-x64": "bun build --compile --minify --target=bun-linux-x64 index.ts --outfile npm-packages/linux-x64/revu-bin",
+    "build:linux-arm64": "bun build --compile --minify --target=bun-linux-arm64 index.ts --outfile npm-packages/linux-arm64/revu-bin",
+    "build:all": "bun run build:darwin-arm64 && bun run build:darwin-x64 && bun run build:linux-x64 && bun run build:linux-arm64"
   },
-  "bin": {
-    "revu": "index.ts"
+  "optionalDependencies": {
+    "@kud/revu-cli-darwin-arm64": "0.1.0",
+    "@kud/revu-cli-darwin-x64": "0.1.0",
+    "@kud/revu-cli-linux-x64": "0.1.0",
+    "@kud/revu-cli-linux-arm64": "0.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -19,5 +34,12 @@
   },
   "dependencies": {
     "@opentui/core": "0.1.95"
-  }
+  },
+  "license": "MIT",
+  "keywords": [
+    "diff",
+    "review",
+    "cli",
+    "tui"
+  ]
 }

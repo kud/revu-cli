@@ -1,0 +1,15 @@
+{
+  "name": "@kud/revu-cli-linux-x64",
+  "version": "0.1.0",
+  "description": "revu-cli binary for Linux x64",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "revu-bin"
+  ],
+  "license": "MIT"
+}

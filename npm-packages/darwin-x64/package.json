@@ -1,0 +1,15 @@
+{
+  "name": "@kud/revu-cli-darwin-x64",
+  "version": "0.1.0",
+  "description": "revu-cli binary for macOS x64",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "revu-bin"
+  ],
+  "license": "MIT"
+}
