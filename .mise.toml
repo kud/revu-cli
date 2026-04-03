@@ -1,10 +1,14 @@
 [tools]
 bun = "1.3.11"
 
-[tasks.run]
+[tasks.dev]
+run = "bun --hot {{config_root}}/index.ts"
+description = "Run revu in hot-reload mode for development"
+
+[tasks.start]
 run = "bun {{config_root}}/index.ts"
-description = "Run revu — optionally pass a repo path: mise run run -- /path/to/repo"
+description = "Run revu — optionally pass a repo path: mise run start -- /path/to/repo"
 
 [tasks.build]
-run = "bun build index.ts --compile --outfile revu-bin"
+run = "bun build index.ts --compile --minify --outfile revu-bin"
 description = "Compile revu to a standalone binary"

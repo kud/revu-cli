@@ -2,27 +2,153 @@
 import {
   createCliRenderer,
   DiffRenderable,
-  InputRenderable,
-  InputRenderableEvents,
+  TextareaRenderable,
   SelectRenderable,
   TextRenderable,
   BoxRenderable,
   RGBA,
   SyntaxStyle,
   type KeyEvent,
+  t,
+  fg,
+  dim,
 } from "@opentui/core"
 
-const targetDir = process.argv[2] ?? process.cwd()
+const args = process.argv.slice(2)
 
-const stagedOutput = await Bun.$`git diff --staged`.cwd(targetDir).text()
-const fullDiff = stagedOutput.trim()
-  ? stagedOutput
-  : await Bun.$`git diff`.cwd(targetDir).text()
+if (args.includes("--help") || args.includes("-h")) {
+  console.log(`revu — interactive diff reviewer
+
+Usage:
+  revu [path]                   Review staged/unstaged changes in [path] (default: cwd)
+  revu --against <branch>       Review all commits between <branch> and HEAD
+
+Options:
+  -h, --help                    Show this help
+
+Keys:
+  ↑↓ / j k                     Move cursor
+  shift+↑↓                      Select range
+  ↵                             Annotate line / range
+  ] [                           Jump to next / prev hunk
+  c C                           Jump to next / prev annotation
+  e                             Export annotations to revu-output.md
+  s                             Settings (theme, view)
+  q                             Quit
+
+Config:
+  revu.json in the target repo  { "outputFilename": "my-review.md" }`)
+  process.exit(0)
+}
+
+let againstBranch: string | null = null
+const positionalArgs: string[] = []
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === "--against" && args[i + 1]) {
+    againstBranch = args[++i]!
+  } else {
+    positionalArgs.push(args[i]!)
+  }
+}
+const rawTarget = positionalArgs[0] ?? process.cwd()
+const targetFile = await (async () => {
+  try {
+    const result = await Bun.$`test -f ${rawTarget}`.nothrow().quiet()
+    return result.exitCode === 0 ? rawTarget : null
+  } catch {
+    return null
+  }
+})()
+const targetDir = targetFile
+  ? (
+      await Bun.$`git rev-parse --show-toplevel`
+        .cwd(
+          rawTarget.includes("/")
+            ? rawTarget.slice(0, rawTarget.lastIndexOf("/"))
+            : process.cwd(),
+        )
+        .text()
+    ).trim()
+  : rawTarget
+const prMode = againstBranch !== null
+
+let fullDiff: string
+let currentBranch: string | null = null
+let commitList: string[] = []
+const fileStatusMap = new Map<string, string>()
+
+if (prMode) {
+  try {
+    fullDiff = await Bun.$`git diff ${againstBranch}...HEAD`
+      .cwd(targetDir)
+      .text()
+  } catch {
+    console.error(
+      `Branch '${againstBranch}' not found or has no common ancestor with HEAD.`,
+    )
+    process.exit(1)
+  }
+  const nameStatus = await Bun.$`git diff --name-status ${againstBranch}...HEAD`
+    .cwd(targetDir)
+    .text()
+  for (const line of nameStatus.trim().split("\n").filter(Boolean)) {
+    const parts = line.split("\t")
+    const status = parts[0]!.charAt(0)
+    const file = status === "R" ? parts[2]! : parts[1]!
+    fileStatusMap.set(file, status)
+  }
+  currentBranch = (
+    await Bun.$`git rev-parse --abbrev-ref HEAD`.cwd(targetDir).text()
+  ).trim()
+  commitList = (
+    await Bun.$`git log ${againstBranch}..HEAD --oneline`.cwd(targetDir).text()
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+} else if (targetFile) {
+  const relPath = targetFile.replace(targetDir + "/", "")
+  const stagedOutput = await Bun.$`git diff --staged -- ${relPath}`
+    .cwd(targetDir)
+    .text()
+  fullDiff = stagedOutput.trim()
+    ? stagedOutput
+    : await Bun.$`git diff -- ${relPath}`.cwd(targetDir).text()
+} else {
+  const stagedOutput = await Bun.$`git diff --staged`.cwd(targetDir).text()
+  fullDiff = stagedOutput.trim()
+    ? stagedOutput
+    : await Bun.$`git diff`.cwd(targetDir).text()
+}
 
 if (!fullDiff.trim()) {
-  console.error("No diff found (neither staged nor unstaged changes).")
+  const msg = prMode
+    ? `No diff found between '${againstBranch}' and HEAD.`
+    : "No diff found (neither staged nor unstaged changes)."
+  console.error(msg)
   process.exit(1)
 }
+
+// ── Config ────────────────────────────────────────────────────────────────────
+
+interface RevuConfig {
+  outputFilename?: string
+}
+
+const loadConfig = async (): Promise<RevuConfig> => {
+  const configPath = `${targetDir}/revu.json`
+  try {
+    const file = Bun.file(configPath)
+    if (await file.exists()) return (await file.json()) as RevuConfig
+  } catch {}
+  return {}
+}
+
+const revuConfig = await loadConfig()
+const rawOutputFilename = revuConfig.outputFilename ?? "revu-output.md"
+let outputFilename = rawOutputFilename.endsWith(".md")
+  ? rawOutputFilename
+  : `${rawOutputFilename}.md`
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -80,8 +206,8 @@ const THEMES: Theme[] = [
     modalBorder: "#343b5a",
     modalFg: "#a6accd",
     commentedBg: "#2e2800",
-    cursorBg: "#1e2540",
-    selectionBg: "#2d3555",
+    cursorBg: "#2d3555",
+    selectionBg: "#1e2540",
     syntax: {
       default: { fg: "#a6accd" },
       string: { fg: "#c3e88d" },
@@ -116,8 +242,8 @@ const THEMES: Theme[] = [
     modalBorder: "#292e42",
     modalFg: "#c0caf5",
     commentedBg: "#2a2000",
-    cursorBg: "#1e2a40",
-    selectionBg: "#283457",
+    cursorBg: "#283457",
+    selectionBg: "#1e2a40",
     syntax: {
       default: { fg: "#c0caf5" },
       string: { fg: "#9ece6a" },
@@ -152,8 +278,8 @@ const THEMES: Theme[] = [
     modalBorder: "#434c5e",
     modalFg: "#eceff4",
     commentedBg: "#3b3000",
-    cursorBg: "#2a3a48",
-    selectionBg: "#374a60",
+    cursorBg: "#374a60",
+    selectionBg: "#2a3a48",
     syntax: {
       default: { fg: "#eceff4" },
       string: { fg: "#a3be8c" },
@@ -188,8 +314,8 @@ const THEMES: Theme[] = [
     modalBorder: "#30363d",
     modalFg: "#c9d1d9",
     commentedBg: "#3d2b00",
-    cursorBg: "#1c2e4a",
-    selectionBg: "#1f3a5f",
+    cursorBg: "#1f3a5f",
+    selectionBg: "#1c2e4a",
     syntax: {
       default: { fg: "#c9d1d9" },
       string: { fg: "#a5d6ff" },
@@ -224,8 +350,8 @@ const THEMES: Theme[] = [
     modalBorder: "#44475a",
     modalFg: "#f8f8f2",
     commentedBg: "#3a2b00",
-    cursorBg: "#373a50",
-    selectionBg: "#44475a",
+    cursorBg: "#44475a",
+    selectionBg: "#373a50",
     syntax: {
       default: { fg: "#f8f8f2" },
       string: { fg: "#f1fa8c" },
@@ -260,8 +386,8 @@ const THEMES: Theme[] = [
     modalBorder: "#45475a",
     modalFg: "#cdd6f4",
     commentedBg: "#2a2000",
-    cursorBg: "#2a2a40",
-    selectionBg: "#313264",
+    cursorBg: "#313264",
+    selectionBg: "#2a2a40",
     syntax: {
       default: { fg: "#cdd6f4" },
       string: { fg: "#a6e3a1" },
@@ -296,8 +422,8 @@ const THEMES: Theme[] = [
     modalBorder: "#3e3d32",
     modalFg: "#f8f8f2",
     commentedBg: "#2e2800",
-    cursorBg: "#2a2e20",
-    selectionBg: "#49483e",
+    cursorBg: "#49483e",
+    selectionBg: "#2a2e20",
     syntax: {
       default: { fg: "#f8f8f2" },
       string: { fg: "#e6db74" },
@@ -332,8 +458,8 @@ const THEMES: Theme[] = [
     modalBorder: "#3c3836",
     modalFg: "#ebdbb2",
     commentedBg: "#2e2800",
-    cursorBg: "#2a2a1e",
-    selectionBg: "#3c4a28",
+    cursorBg: "#3c4a28",
+    selectionBg: "#2a2a1e",
     syntax: {
       default: { fg: "#ebdbb2" },
       string: { fg: "#b8bb26" },
@@ -368,8 +494,8 @@ const THEMES: Theme[] = [
     modalBorder: "#26233a",
     modalFg: "#e0def4",
     commentedBg: "#2a1e00",
-    cursorBg: "#221e36",
-    selectionBg: "#2a2540",
+    cursorBg: "#2a2540",
+    selectionBg: "#221e36",
     syntax: {
       default: { fg: "#e0def4" },
       string: { fg: "#f6c177" },
@@ -404,8 +530,8 @@ const THEMES: Theme[] = [
     modalBorder: "#d0d0d0",
     modalFg: "#383a42",
     commentedBg: "#fff4cc",
-    cursorBg: "#e8f0fe",
-    selectionBg: "#c8d8f0",
+    cursorBg: "#c8d8f0",
+    selectionBg: "#e8f0fe",
     syntax: {
       default: { fg: "#383a42" },
       string: { fg: "#50a14f" },
@@ -425,6 +551,7 @@ interface FileDiff {
   file: string
   raw: string
   lines: string[]
+  status?: string
 }
 
 const splitByFile = (raw: string): FileDiff[] => {
@@ -439,6 +566,9 @@ const splitByFile = (raw: string): FileDiff[] => {
 }
 
 const fileDiffs = splitByFile(fullDiff)
+if (prMode) {
+  for (const fd of fileDiffs) fd.status = fileStatusMap.get(fd.file) ?? "M"
+}
 const files = fileDiffs.map((f) => f.file)
 
 // Comments: keyed "file:N" for single line, "file:N-M" for range (N < M)
@@ -448,6 +578,56 @@ const commentKey = (file: string, startLine: number, endLine?: number) =>
   endLine !== undefined && endLine !== startLine
     ? `${file}:${Math.min(startLine, endLine)}-${Math.max(startLine, endLine)}`
     : `${file}:${startLine}`
+
+const loadCommentsFromExport = async (): Promise<void> => {
+  const exportFile = Bun.file(`${targetDir}/${outputFilename}`)
+  if (!(await exportFile.exists())) return
+  const lines = (await exportFile.text()).split("\n")
+  let currentFile = ""
+  let startLine = 0
+  let endLine = 0
+  let commentLines: string[] = []
+  const flush = () => {
+    if (currentFile && startLine > 0 && commentLines.length > 0) {
+      const key = commentKey(
+        currentFile,
+        startLine,
+        endLine !== startLine ? endLine : undefined,
+      )
+      comments.set(key, commentLines.join("\n").trim())
+    }
+    commentLines = []
+  }
+  for (const line of lines) {
+    if (line.startsWith("## `") && line.endsWith("`")) {
+      flush()
+      currentFile = line.slice(4, -1)
+      startLine = 0
+      endLine = 0
+    } else if (line.startsWith("### Lines ")) {
+      flush()
+      const [s, e] = line.slice(10).split("–")
+      startLine = parseInt(s!, 10)
+      endLine = parseInt(e!, 10)
+    } else if (line.startsWith("### Line ")) {
+      flush()
+      startLine = parseInt(line.slice(9), 10)
+      endLine = startLine
+    } else if (line.startsWith("> ")) {
+      commentLines.push(line.slice(2))
+    } else if (
+      commentLines.length > 0 &&
+      line !== "" &&
+      !line.startsWith("#") &&
+      !line.startsWith("```")
+    ) {
+      commentLines.push(line)
+    }
+  }
+  flush()
+}
+
+await loadCommentsFromExport()
 
 const isLineCommented = (file: string, lineNum: number): boolean => {
   for (const key of comments.keys()) {
@@ -489,23 +669,35 @@ const findCommentKeyForLine = (
 const SETTINGS_PATH = `${process.env.HOME}/.config/revu/settings.json`
 
 const loadSettings = () => {
-  try {
-    const parsed = JSON.parse(Bun.file(SETTINGS_PATH).textSync())
-    return {
-      themeIndex:
-        typeof parsed.themeIndex === "number"
-          ? Math.min(parsed.themeIndex, THEMES.length - 1)
-          : 0,
-      diffView:
-        parsed.diffView === "split" ? ("split" as const) : ("unified" as const),
+  const global = (() => {
+    try {
+      return JSON.parse(Bun.file(SETTINGS_PATH).textSync())
+    } catch {
+      return {}
     }
-  } catch {
-    return { themeIndex: 0, diffView: "unified" as const }
+  })()
+  const merged = { ...global, ...revuConfig }
+  return {
+    themeIndex:
+      typeof merged.themeIndex === "number"
+        ? Math.min(merged.themeIndex, THEMES.length - 1)
+        : 0,
+    diffView:
+      merged.diffView === "split" ? ("split" as const) : ("unified" as const),
   }
 }
 
-const saveSettings = () =>
-  Bun.write(SETTINGS_PATH, JSON.stringify({ themeIndex, diffView }, null, 2))
+const saveSettings = async () => {
+  const updated = { ...revuConfig, themeIndex, diffView, outputFilename }
+  await Bun.write(
+    `${targetDir}/revu.json`,
+    JSON.stringify(updated, null, 2) + "\n",
+  )
+  await Bun.write(
+    SETTINGS_PATH,
+    JSON.stringify({ themeIndex, diffView }, null, 2),
+  )
+}
 
 const saved = loadSettings()
 let themeIndex = saved.themeIndex
@@ -517,7 +709,7 @@ let fileIndex = 0
 let cursorLine = 0
 let prevCursorLine = 0
 let selectionAnchor: number | null = null
-let focusedPanel: "tree" | "diff" = "diff"
+let focusedPanel: "tree" | "diff" = "tree"
 type Mode = "normal" | "comment" | "settings"
 let mode: Mode = "normal"
 let commentTargetLine = 0
@@ -555,7 +747,7 @@ const getFiletype = (filename: string): string | undefined => {
 
 const theme = () => THEMES[themeIndex]!
 const currentFileDiff = () => fileDiffs[fileIndex]!
-const TREE_WIDTH = 30
+const TREE_WIDTH = 38
 
 const buildSyntaxStyle = (t: Theme) =>
   SyntaxStyle.fromStyles(
@@ -610,21 +802,49 @@ const treeHeaderText = new TextRenderable(renderer, {
 treeHeaderText.fg = theme().treeHeader
 treeHeaderText.backgroundColor = theme().headerBg
 
+const updateTreeHeader = () => {
+  const th = theme()
+  if (prMode) {
+    const counts = { A: 0, M: 0, D: 0, R: 0 }
+    for (const fd of fileDiffs) {
+      const s = (fd.status ?? "M") as keyof typeof counts
+      if (s in counts) counts[s]++
+    }
+    const parts: string[] = []
+    if (counts.M)
+      parts.push(`${fg(th.commentMark)(String(counts.M))}${dim("M")}`)
+    if (counts.A) parts.push(`${fg(th.successFg)(String(counts.A))}${dim("A")}`)
+    if (counts.D) parts.push(`${fg("#f07178")(String(counts.D))}${dim("D")}`)
+    if (counts.R)
+      parts.push(`${fg(th.treeActive)(String(counts.R))}${dim("R")}`)
+    treeHeaderText.content =
+      parts.length > 0
+        ? t`  ${dim("Files")}  ${parts.join("  ")}`
+        : t`  ${dim("Files")}`
+  } else {
+    treeHeaderText.content = t`  ${dim("Files")}  ${fg(th.treeActive)(String(fileDiffs.length))}`
+  }
+}
+
 const fileListBox = new BoxRenderable(renderer, {
   flexGrow: 1,
   flexDirection: "column",
 })
+const BADGE_WIDTH = prMode ? 2 : 0
+const treeAvail = TREE_WIDTH - 4 - BADGE_WIDTH
+
 const fileTextMap = new Map<string, TextRenderable>()
-for (const file of files) {
+for (const fd of fileDiffs) {
   const label =
-    file.length > TREE_WIDTH - 4 ? "…" + file.slice(-(TREE_WIDTH - 5)) : file
+    fd.file.length > treeAvail ? "…" + fd.file.slice(-(treeAvail - 1)) : fd.file
+  const badge = prMode ? `${fd.status ?? "M"} ` : ""
   const t = new TextRenderable(renderer, {
-    content: `  ${label}`,
+    content: `  ${badge}${label}`,
     width: "100%",
     height: 1,
   })
   t.fg = theme().treeInactive
-  fileTextMap.set(file, t)
+  fileTextMap.set(fd.file, t)
   fileListBox.add(t)
 }
 fileTreeBox.add(treeHeaderText)
@@ -636,28 +856,60 @@ const diffRenderable = new DiffRenderable(renderer, {
   showLineNumbers: true,
   filetype: getFiletype(currentFileDiff().file),
   flexGrow: 1,
-  addedBg: theme().addedBg,
+  addedBg: RGBA.fromValues(0, 0, 0, 0),
   removedBg: theme().removedBg,
   contextBg: RGBA.fromValues(0, 0, 0, 0),
   syntaxStyle: buildSyntaxStyle(theme()),
 })
 
-mainArea.add(fileTreeBox)
-mainArea.add(diffRenderable)
+const diffColumn = new BoxRenderable(renderer, {
+  flexGrow: 1,
+  flexDirection: "column",
+})
 
 const commentBarBox = new BoxRenderable(renderer, {
-  width: "100%",
-  height: 1,
+  height: 3,
   flexDirection: "row",
   backgroundColor: theme().inputBg,
   visible: false,
   alignItems: "center",
 })
-const commentLabel = new TextRenderable(renderer, { content: "" })
+const commentLabel = new TextRenderable(renderer, { content: "", height: 3 })
 commentLabel.fg = theme().commentMark
-const commentInput = new InputRenderable(renderer, { flexGrow: 1, value: "" })
+const commentInput = new TextareaRenderable(renderer, {
+  flexGrow: 1,
+  height: 3,
+})
 commentInput.textColor = theme().inputFg
 commentInput.backgroundColor = theme().inputBg
+
+const commentPreviewBox = new BoxRenderable(renderer, {
+  height: 2,
+  flexDirection: "column",
+  backgroundColor: theme().inputBg,
+  visible: false,
+})
+const commentPreviewLabel = new TextRenderable(renderer, {
+  content: "",
+  width: "100%",
+  height: 1,
+})
+commentPreviewLabel.fg = theme().commentMark
+commentPreviewLabel.backgroundColor = theme().headerBg
+const commentPreviewContent = new TextRenderable(renderer, {
+  content: "",
+  width: "100%",
+  flexGrow: 1,
+})
+commentPreviewContent.fg = theme().inputFg
+
+diffColumn.add(diffRenderable)
+diffColumn.add(commentPreviewBox)
+diffColumn.add(commentBarBox)
+const singleFile = fileDiffs.length === 1
+if (singleFile) focusedPanel = "diff"
+if (!singleFile) mainArea.add(fileTreeBox)
+mainArea.add(diffColumn)
 
 const footerBox = new BoxRenderable(renderer, {
   width: "100%",
@@ -667,20 +919,27 @@ const footerBox = new BoxRenderable(renderer, {
 })
 const footerText = new TextRenderable(renderer, { content: "", flexGrow: 1 })
 footerText.fg = theme().mutedFg
+const footerPosition = new TextRenderable(renderer, { content: "", width: 24 })
+footerPosition.fg = theme().mutedFg
 
 const MODAL_W = 46
+const MODAL_H = THEMES.length + 9
 const settingsModal = new BoxRenderable(renderer, {
   width: MODAL_W,
-  height: THEMES.length + 5,
+  height: MODAL_H,
   flexDirection: "column",
-  backgroundColor: theme().modalBg,
+  backgroundColor: theme().bg,
   border: true,
   borderColor: theme().modalBorder,
   position: "absolute",
   visible: false,
   zIndex: 10,
 })
-settingsModal.setPosition({ top: 4, left: 18 })
+const centerModal = () => {
+  const top = Math.max(0, Math.floor((renderer.terminalHeight - MODAL_H) / 2))
+  const left = Math.max(0, Math.floor((renderer.terminalWidth - MODAL_W) / 2))
+  settingsModal.setPosition({ top, left })
+}
 
 const modalTitle = new TextRenderable(renderer, {
   content: "  Settings",
@@ -703,39 +962,79 @@ const themeSelect = new SelectRenderable(renderer, {
   selectedIndex: themeIndex,
   wrapSelection: true,
   showDescription: false,
-  backgroundColor: theme().modalBg,
+  backgroundColor: theme().bg,
   textColor: theme().modalFg,
   focusedBackgroundColor: theme().addedBg,
   focusedTextColor: theme().modalFg,
 })
 
 const modalViewLabel = new TextRenderable(renderer, {
-  content: "",
+  content: "  View",
   width: "100%",
   height: 1,
 })
 modalViewLabel.fg = theme().mutedFg
 
+const VIEW_OPTIONS = ["  unified", "  split"]
+const viewSelect = new SelectRenderable(renderer, {
+  height: 2,
+  options: VIEW_OPTIONS.map((n) => ({ name: n, description: "" })),
+  selectedIndex: diffView === "split" ? 1 : 0,
+  wrapSelection: false,
+  showDescription: false,
+  backgroundColor: theme().bg,
+  textColor: theme().modalFg,
+  focusedBackgroundColor: theme().addedBg,
+  focusedTextColor: theme().modalFg,
+})
+
+const modalOutputLabel = new TextRenderable(renderer, {
+  content: "  Output file",
+  width: "100%",
+  height: 1,
+})
+modalOutputLabel.fg = theme().mutedFg
+
+const modalOutputInput = new TextareaRenderable(renderer, {
+  width: "100%",
+  height: 1,
+  paddingLeft: 2,
+})
+modalOutputInput.textColor = theme().modalFg
+modalOutputInput.backgroundColor = RGBA.fromValues(0, 0, 0, 0)
+modalOutputInput.setText(outputFilename)
+
 const modalHint = new TextRenderable(renderer, {
-  content: "  ↑↓ select · ↵ apply · v view · esc close",
   width: "100%",
   height: 1,
 })
 modalHint.fg = theme().mutedFg
+const updateModalHint = () => {
+  const w = fg("#ffffff")
+  const d = dim
+  const s = d("  ·  ")
+  modalHint.content = t`  ${w("↑↓")} ${d("select")}${s}${w("tab")} ${d("next field")}${s}${w("↵")} ${d("apply")}${s}${w("esc")} ${d("close")}`
+}
+updateModalHint()
 
 settingsModal.add(modalTitle)
 settingsModal.add(modalThemeLabel)
 settingsModal.add(themeSelect)
 settingsModal.add(modalViewLabel)
+settingsModal.add(viewSelect)
+settingsModal.add(modalOutputLabel)
+settingsModal.add(modalOutputInput)
 settingsModal.add(modalHint)
 
 headerBox.add(headerText)
 commentBarBox.add(commentLabel)
 commentBarBox.add(commentInput)
+commentPreviewBox.add(commentPreviewLabel)
+commentPreviewBox.add(commentPreviewContent)
 footerBox.add(footerText)
+footerBox.add(footerPosition)
 rootBox.add(headerBox)
 rootBox.add(mainArea)
-rootBox.add(commentBarBox)
 rootBox.add(footerBox)
 renderer.root.add(rootBox)
 renderer.root.add(settingsModal)
@@ -764,15 +1063,108 @@ const ensureCursorVisible = () => {
       ? scrollable.height
       : process.stdout.rows - 3,
   )
+  const contentIdx = rawToContentIdx(cursorLine)
   const sy = scrollable.scrollY as number
-  if (cursorLine < sy) {
-    scrollable.scrollY = cursorLine
-  } else if (cursorLine >= sy + viewH) {
-    scrollable.scrollY = Math.max(0, cursorLine - viewH + 3)
+  if (contentIdx < sy) {
+    scrollable.scrollY = contentIdx
+  } else if (contentIdx >= sy + viewH) {
+    scrollable.scrollY = Math.max(0, contentIdx - viewH + 3)
   }
 }
 
 // ── State helpers ─────────────────────────────────────────────────────────────
+
+const isContentLine = (l: string) =>
+  (l.startsWith("+") && !l.startsWith("+++")) ||
+  (l.startsWith("-") && !l.startsWith("---")) ||
+  l.startsWith(" ")
+
+const rawToContentIdx = (rawIdx: number): number => {
+  const lines = currentFileDiff().lines
+  let idx = 0
+  for (let i = 0; i < rawIdx && i < lines.length; i++) {
+    if (isContentLine(lines[i]!)) idx++
+  }
+  return idx
+}
+
+const nextContentRawIdx = (rawIdx: number, dir: 1 | -1): number => {
+  const lines = currentFileDiff().lines
+  let idx = rawIdx + dir
+  while (idx >= 0 && idx < lines.length) {
+    if (isContentLine(lines[idx]!)) return idx
+    idx += dir
+  }
+  return rawIdx
+}
+
+const firstContentRawIdx = (): number => {
+  const lines = currentFileDiff().lines
+  for (let i = 0; i < lines.length; i++) {
+    if (isContentLine(lines[i]!)) return i
+  }
+  return 0
+}
+
+const totalContentLines = () =>
+  currentFileDiff().lines.filter(isContentLine).length
+
+const currentContentLineIdx = () => rawToContentIdx(cursorLine) + 1
+
+const jumpToHunk = (dir: 1 | -1) => {
+  const lines = currentFileDiff().lines
+  let idx = cursorLine + dir
+  while (idx >= 0 && idx < lines.length) {
+    if (lines[idx]!.startsWith("@@ ")) {
+      const next = nextContentRawIdx(idx, 1)
+      if (next !== cursorLine) {
+        prevCursorLine = cursorLine
+        paintLine(prevCursorLine)
+        cursorLine = next
+        paintLine(cursorLine)
+        ensureCursorVisible()
+        updateHeader()
+        updateFooter()
+      }
+      return
+    }
+    idx += dir
+  }
+}
+
+const jumpToComment = (dir: 1 | -1) => {
+  const file = currentFileDiff().file
+  const lines = currentFileDiff().lines
+  let counter = 0
+  const lineNums: Array<{ rawIdx: number; lineNum: number }> = []
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i]!
+    if (l.startsWith("@@ ")) {
+      const m = l.match(/@@ -\d+(?:,\d+)? \+(\d+)/)
+      counter = m ? parseInt(m[1]!, 10) : counter
+    } else if (isContentLine(l)) {
+      if (!l.startsWith("-")) {
+        if (isLineCommented(file, counter))
+          lineNums.push({ rawIdx: i, lineNum: counter })
+        counter++
+      }
+    }
+  }
+  if (lineNums.length === 0) return
+  const candidates =
+    dir === 1
+      ? lineNums.filter((x) => x.rawIdx > cursorLine)
+      : lineNums.filter((x) => x.rawIdx < cursorLine)
+  const target = dir === 1 ? candidates[0] : candidates[candidates.length - 1]
+  if (!target) return
+  prevCursorLine = cursorLine
+  paintLine(prevCursorLine)
+  cursorLine = target.rawIdx
+  paintLine(cursorLine)
+  ensureCursorVisible()
+  updateHeader()
+  updateFooter()
+}
 
 const fileLineCount = () => currentFileDiff().lines.length
 
@@ -803,19 +1195,22 @@ const selectionRange = () =>
       }
     : null
 
-const paintLine = (i: number) => {
+const paintLine = (rawIdx: number) => {
+  const lines = currentFileDiff().lines
+  if (!isContentLine(lines[rawIdx] ?? "")) return
+  const contentIdx = rawToContentIdx(rawIdx)
   const file = currentFileDiff().file
-  const lineNum = diffLineToFileLineNum(i)
+  const lineNum = diffLineToFileLineNum(rawIdx)
   const sel = selectionRange()
-  const inSel = sel !== null && i >= sel.start && i <= sel.end
-  if (i === cursorLine) {
-    diffRenderable.setLineColor(i, theme().cursorBg)
+  const inSel = sel !== null && rawIdx >= sel.start && rawIdx <= sel.end
+  if (rawIdx === cursorLine) {
+    diffRenderable.setLineColor(contentIdx, theme().cursorBg)
   } else if (inSel) {
-    diffRenderable.setLineColor(i, theme().selectionBg)
+    diffRenderable.setLineColor(contentIdx, theme().selectionBg)
   } else if (lineNum !== null && isLineCommented(file, lineNum)) {
-    diffRenderable.setLineColor(i, theme().commentedBg)
+    diffRenderable.setLineColor(contentIdx, theme().commentedBg)
   } else {
-    diffRenderable.clearLineColor(i)
+    diffRenderable.clearLineColor(contentIdx)
   }
 }
 
@@ -828,6 +1223,15 @@ const clearSelection = () => {
 }
 
 const updateFooter = () => {
+  updateCommentPreview()
+  const hi = fg("#ffffff")
+  const sep = dim("  ·  ")
+  footerPosition.content = ""
+  if (mode === "comment") {
+    footerText.content = t`  ${hi("⌥↵")} ${dim("submit")}${sep}${hi("esc")} ${dim("cancel")}`
+    footerText.fg = theme().mutedFg
+    return
+  }
   const sel = selectionRange()
   if (sel !== null) {
     const startLN = diffLineToFileLineNum(sel.start)
@@ -836,61 +1240,109 @@ const updateFooter = () => {
       startLN !== null && endLN !== null
         ? `lines ${startLN}–${endLN}`
         : `${sel.end - sel.start + 1} lines`
-    footerText.content = `  ⬚ ${rangeStr} selected  ·  ↵ comment  ·  esc cancel`
+    footerText.content = t`  ⬚ ${dim(`${rangeStr} selected`)}${sep}${hi("↵")} ${dim("annotate")}${sep}${hi("esc")} ${dim("cancel")}`
     footerText.fg = theme().headerFg
     return
   }
-  const lineNum = diffLineToFileLineNum(cursorLine)
-  const key =
-    lineNum != null ? commentKey(currentFileDiff().file, lineNum) : null
-  const comment = key ? comments.get(key) : undefined
-  if (!comment && lineNum !== null) {
-    const rangeKey = findCommentKeyForLine(currentFileDiff().file, lineNum)
-    if (rangeKey) {
-      footerText.content = `  ✎ ${rangeKey.split(":").slice(1).join(":")}: ${comments.get(rangeKey)}`
-      footerText.fg = theme().commentMark
-      return
-    }
-  }
-  if (comment) {
-    footerText.content = `  ✎ Line ${lineNum}: ${comment}`
-    footerText.fg = theme().commentMark
-  } else if (focusedPanel === "tree") {
-    footerText.content = `  ↑↓ navigate files  ·  → or ↵ focus diff  ·  s settings  ·  e export  ·  q quit`
-    footerText.fg = theme().mutedFg
+  if (focusedPanel === "tree") {
+    footerText.content = t`  ${hi("↑↓")} ${dim("files")}${sep}${hi("↵")} ${dim("open")}${sep}${hi("e")} ${dim(`export → ${outputFilename}`)}${sep}${hi("s")} ${dim("settings")}${sep}${hi("q")} ${dim("quit")}`
   } else {
-    footerText.content = `  ↑↓/jk move  ·  ⇧↑↓ select  ·  ↵ comment  ·  d delete  ·  ← files  ·  e export  ·  s settings  ·  q quit`
-    footerText.fg = theme().mutedFg
+    footerText.content = t`  ${hi("↑↓")} ${dim("move")}${sep}${hi("shift+↑↓")} ${dim("select")}${sep}${hi("↵")} ${dim("annotate")}${sep}${hi("e")} ${dim(`export → ${outputFilename}`)}${sep}${hi("q")} ${dim("quit")}`
   }
+  footerText.fg = theme().mutedFg
+}
+
+const updateCommentPreview = () => {
+  if (mode !== "normal" || focusedPanel !== "diff") {
+    commentPreviewBox.visible = false
+    return
+  }
+  const lineNum = diffLineToFileLineNum(cursorLine)
+  if (lineNum === null) {
+    commentPreviewBox.visible = false
+    return
+  }
+  const file = currentFileDiff().file
+  const key =
+    findCommentKeyForLine(file, lineNum) ??
+    (comments.has(commentKey(file, lineNum)) ? commentKey(file, lineNum) : null)
+  const comment = key ? comments.get(key) : null
+  if (!comment) {
+    commentPreviewBox.visible = false
+    return
+  }
+  const parts = key!.split(":")
+  const lineRef = parts.slice(1).join(":")
+  const lineLabel = lineRef.includes("-")
+    ? `lines ${lineRef}`
+    : `line ${lineRef}`
+  const commentLines = comment.split("\n")
+  const MAX_PREVIEW = 4
+  const truncated = commentLines.length > MAX_PREVIEW
+  const visibleLines = truncated
+    ? commentLines.slice(0, MAX_PREVIEW)
+    : commentLines
+  const moreIndicator = truncated
+    ? dim(`  +${commentLines.length - MAX_PREVIEW} more`)
+    : ""
+  commentPreviewLabel.content = t`  ${fg(theme().commentMark)("▌")} ${fg(theme().commentMark)(lineLabel)}  ${dim("↵ edit  d delete")}${moreIndicator}`
+  commentPreviewContent.content = visibleLines
+    .map((l) => `  ▌  ${l}`)
+    .join("\n")
+  commentPreviewBox.height = Math.min(visibleLines.length + 1, 6)
+  commentPreviewBox.visible = true
 }
 
 const updateHeader = () => {
   const count = comments.size
   const file = currentFileDiff().file
   const shortFile = file.length > 40 ? "…" + file.slice(-39) : file
-  headerText.content = `  revu  ·  ${shortFile}  ·  ${count} ${count === 1 ? "comment" : "comments"}`
+  const modeStr = prMode
+    ? `${currentBranch} → ${againstBranch}  ·  ${commitList.length} ${commitList.length === 1 ? "commit" : "commits"}  ·  `
+    : ""
+  const lineIdx = currentContentLineIdx()
+  const total = totalContentLines()
+  const posStr = focusedPanel === "diff" ? `  ·  ${lineIdx}/${total}` : ""
+  headerText.content = `  revu  ·  ${modeStr}${shortFile}${posStr}  ·  ${count} ${count === 1 ? "note" : "notes"}`
   headerText.fg = theme().headerFg
+  updateTreeHeader()
+}
+
+const badgeColor = (status: string, th: Theme) => {
+  if (status === "A") return th.successFg
+  if (status === "D") return "#f07178"
+  if (status === "R") return th.treeActive
+  return th.commentMark
 }
 
 const updateFileTree = () => {
-  const t = theme()
+  if (singleFile) return
+  const th = theme()
+  const treeActive = focusedPanel === "tree"
+  fileTreeBox.borderColor = treeActive ? th.treeFocused : th.treeBorder
+  treeHeaderText.backgroundColor = treeActive ? th.headerBg : th.bg
+  treeHeaderText.fg = treeActive ? th.treeFocused : th.treeHeader
   for (const [file, text] of fileTextMap) {
     const hasComments = [...comments.keys()].some((k) =>
       k.startsWith(`${file}:`),
     )
     const isActive = files[fileIndex] === file
     const label =
-      file.length > TREE_WIDTH - 4 ? "…" + file.slice(-(TREE_WIDTH - 5)) : file
-    const isFocusedActive = isActive && focusedPanel === "tree"
+      file.length > treeAvail ? "…" + file.slice(-(treeAvail - 1)) : file
+    const status = fileDiffs.find((f) => f.file === file)?.status ?? "M"
+    const isFocusedActive = isActive && treeActive
     const prefix = isFocusedActive ? "❯ " : isActive ? "▶ " : "  "
-    text.content = `${prefix}${label}${hasComments ? " ●" : ""}`
+    const commentMark = hasComments ? fg(th.treeComment)(" ●") : ""
+    text.content = prMode
+      ? t`${prefix}${fg(badgeColor(status, th))(status)} ${label}${commentMark}`
+      : t`${prefix}${label}${commentMark}`
     text.fg = isFocusedActive
-      ? t.treeFocused
+      ? th.treeFocused
       : isActive
-        ? t.treeActive
+        ? th.treeActive
         : hasComments
-          ? t.treeComment
-          : t.treeInactive
+          ? th.treeComment
+          : th.treeInactive
   }
 }
 
@@ -899,31 +1351,26 @@ const applyCommentColorsForCurrentFile = () => {
   const lines = currentFileDiff().lines
   const sel = selectionRange()
   let counter = 0
+  let contentIdx = 0
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i]!
     if (l.startsWith("@@ ")) {
       const m = l.match(/@@ -\d+(?:,\d+)? \+(\d+)/)
       counter = m ? parseInt(m[1]!, 10) : counter
-      diffRenderable.clearLineColor(i)
-    } else {
+    } else if (isContentLine(l)) {
       const inSel = sel !== null && i >= sel.start && i <= sel.end
-      const lineNum = l.startsWith("-")
-        ? null
-        : l.startsWith("+")
-          ? counter
-          : l
-            ? counter
-            : null
+      const lineNum = l.startsWith("-") ? null : counter
       if (i === cursorLine) {
-        diffRenderable.setLineColor(i, theme().cursorBg)
+        diffRenderable.setLineColor(contentIdx, theme().cursorBg)
       } else if (inSel) {
-        diffRenderable.setLineColor(i, theme().selectionBg)
+        diffRenderable.setLineColor(contentIdx, theme().selectionBg)
       } else if (lineNum !== null && isLineCommented(file, lineNum)) {
-        diffRenderable.setLineColor(i, theme().commentedBg)
+        diffRenderable.setLineColor(contentIdx, theme().commentedBg)
       } else {
-        diffRenderable.clearLineColor(i)
+        diffRenderable.clearLineColor(contentIdx)
       }
-      if (!l.startsWith("-") && !l.startsWith("@@ ") && l) counter++
+      if (!l.startsWith("-")) counter++
+      contentIdx++
     }
   }
   updateFooter()
@@ -932,27 +1379,26 @@ const applyCommentColorsForCurrentFile = () => {
 const switchFile = (idx: number) => {
   selectionAnchor = null
   fileIndex = idx
-  cursorLine = 0
-  prevCursorLine = 0
   diffRenderable.diff = currentFileDiff().raw
   diffRenderable.filetype = getFiletype(currentFileDiff().file)
+  cursorLine = firstContentRawIdx()
+  prevCursorLine = cursorLine
+  const scrollable = findCodeScrollable()
+  if (scrollable) scrollable.scrollY = 0
   updateHeader()
   updateFileTree()
   updateFooter()
-  setTimeout(() => {
-    const scrollable = findCodeScrollable()
-    if (scrollable) scrollable.scrollY = 0
-    applyCommentColorsForCurrentFile()
-  }, 50)
+  applyCommentColorsForCurrentFile()
 }
 
 const moveCursor = (delta: number) => {
   prevCursorLine = cursorLine
-  cursorLine = Math.max(0, Math.min(fileLineCount() - 1, cursorLine + delta))
+  cursorLine = nextContentRawIdx(cursorLine, delta > 0 ? 1 : -1)
   if (prevCursorLine !== cursorLine) {
     paintLine(prevCursorLine)
     paintLine(cursorLine)
     ensureCursorVisible()
+    updateHeader()
     updateFooter()
   }
 }
@@ -960,43 +1406,52 @@ const moveCursor = (delta: number) => {
 const moveCursorWithShift = (delta: number) => {
   if (selectionAnchor === null) selectionAnchor = cursorLine
   prevCursorLine = cursorLine
-  cursorLine = Math.max(0, Math.min(fileLineCount() - 1, cursorLine + delta))
+  cursorLine = nextContentRawIdx(cursorLine, delta > 0 ? 1 : -1)
   if (prevCursorLine !== cursorLine) {
     paintLine(prevCursorLine)
     paintLine(cursorLine)
     ensureCursorVisible()
+    updateHeader()
     updateFooter()
   }
 }
 
 const applyTheme = () => {
   const t = theme()
-  diffRenderable.addedBg = t.addedBg
+  diffRenderable.addedBg = RGBA.fromValues(0, 0, 0, 0)
   diffRenderable.removedBg = t.removedBg
   diffRenderable.contextBg = RGBA.fromValues(0, 0, 0, 0)
   diffRenderable.syntaxStyle = buildSyntaxStyle(t)
   headerText.fg = t.headerFg
-  treeHeaderText.fg = t.treeHeader
-  treeHeaderText.backgroundColor = t.headerBg
+  treeHeaderText.fg = focusedPanel === "tree" ? t.treeFocused : t.treeHeader
+  treeHeaderText.backgroundColor = focusedPanel === "tree" ? t.headerBg : t.bg
   commentLabel.fg = t.commentMark
   commentInput.textColor = t.inputFg
   commentInput.backgroundColor = t.inputBg
+  commentPreviewBox.backgroundColor = t.inputBg
+  commentPreviewLabel.fg = t.commentMark
+  commentPreviewLabel.backgroundColor = t.headerBg
+  commentPreviewContent.fg = t.inputFg
+  settingsModal.backgroundColor = t.bg
+  settingsModal.borderColor = t.modalBorder
   modalTitle.fg = t.headerFg
   modalTitle.backgroundColor = t.headerBg
   modalThemeLabel.fg = t.mutedFg
   modalViewLabel.fg = t.mutedFg
+  modalOutputLabel.fg = t.mutedFg
+  modalOutputInput.textColor = t.modalFg
   modalHint.fg = t.mutedFg
-  themeSelect.backgroundColor = t.modalBg
+  themeSelect.backgroundColor = t.bg
   themeSelect.textColor = t.modalFg
   themeSelect.focusedBackgroundColor = t.addedBg
+  viewSelect.backgroundColor = t.bg
+  viewSelect.textColor = t.modalFg
+  viewSelect.focusedBackgroundColor = t.addedBg
+  footerPosition.fg = t.mutedFg
   updateFileTree()
   updateHeader()
   updateFooter()
-  setTimeout(() => applyCommentColorsForCurrentFile(), 50)
-}
-
-const updateModalViewLabel = () => {
-  modalViewLabel.content = `  View: ${diffView === "unified" ? "● unified  ○ split" : "○ unified  ● split"}`
+  applyCommentColorsForCurrentFile()
 }
 
 const getRangeContent = (
@@ -1064,8 +1519,8 @@ const exportComments = async () => {
       sections.push(`### ${lineRef}\n${codeBlock}> ${comment}\n`)
     }
   }
-  await Bun.write(`${targetDir}/revu-output.md`, sections.join("\n"))
-  footerText.content = `  ✓ Exported to revu-output.md`
+  await Bun.write(`${targetDir}/${outputFilename}`, sections.join("\n"))
+  footerText.content = `  ✓ Exported to ${outputFilename}`
   footerText.fg = theme().successFg
   setTimeout(() => updateFooter(), 3000)
 }
@@ -1097,21 +1552,23 @@ const openCommentInput = () => {
   commentLabel.content = isRange
     ? `  ✎ Lines ${commentTargetLine}–${commentTargetEndLine}:  `
     : `  ✎ Line ${commentTargetLine}:  `
-  commentInput.value = existing ?? ""
+  commentInput.setText(existing ?? "")
   commentBarBox.visible = true
   commentInput.focus()
   mode = "comment"
+  updateFooter()
 }
 
 const closeCommentBar = () => {
   commentBarBox.visible = false
   mode = "normal"
   commentInput.blur()
-  commentInput.value = ""
+  commentInput.setText("")
+  updateFooter()
 }
 
-commentInput.on(InputRenderableEvents.ENTER, () => {
-  const value = commentInput.value.trim()
+commentInput.onSubmit = () => {
+  const value = commentInput.plainText.trim()
   const isRange = commentTargetEndLine !== commentTargetLine
   const key = commentKey(
     currentFileDiff().file,
@@ -1128,7 +1585,7 @@ commentInput.on(InputRenderableEvents.ENTER, () => {
   applyCommentColorsForCurrentFile()
   updateFileTree()
   updateHeader()
-})
+}
 
 // ── Keyboard ──────────────────────────────────────────────────────────────────
 
@@ -1141,25 +1598,51 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
   if (mode === "settings") {
     e.stopPropagation()
     if (e.name === "escape") {
+      themeSelect.blur()
+      viewSelect.blur()
+      modalOutputInput.blur()
       settingsModal.visible = false
       mode = "normal"
-      themeSelect.blur()
+    } else if (e.name === "tab") {
+      if (themeSelect.focused) {
+        themeSelect.blur()
+        viewSelect.focus()
+      } else if (viewSelect.focused) {
+        viewSelect.blur()
+        modalOutputInput.focus()
+      } else {
+        modalOutputInput.blur()
+        themeSelect.focus()
+      }
     } else if (
       e.name === "return" ||
       e.name === "enter" ||
       e.sequence === "\r"
     ) {
-      themeIndex = themeSelect.getSelectedIndex()
-      applyTheme()
-      saveSettings()
-      settingsModal.visible = false
-      mode = "normal"
-      themeSelect.blur()
-    } else if (e.name === "v") {
-      diffView = diffView === "unified" ? "split" : "unified"
-      diffRenderable.view = diffView
-      saveSettings()
-      updateModalViewLabel()
+      if (modalOutputInput.focused) {
+        const raw = modalOutputInput.plainText.trim()
+        if (raw) {
+          outputFilename = raw.endsWith(".md") ? raw : `${raw}.md`
+          modalOutputInput.setText(outputFilename)
+        }
+        modalOutputInput.blur()
+        themeSelect.focus()
+      } else {
+        themeIndex = themeSelect.getSelectedIndex()
+        diffView = viewSelect.getSelectedIndex() === 1 ? "split" : "unified"
+        diffRenderable.view = diffView
+        themeSelect.blur()
+        viewSelect.blur()
+        settingsModal.visible = false
+        mode = "normal"
+        applyTheme()
+        saveSettings()
+        updateFooter()
+      }
+    } else if (modalOutputInput.focused) {
+      modalOutputInput.handleKeyPress(e)
+    } else if (viewSelect.focused) {
+      viewSelect.handleKeyPress(e)
     } else {
       themeSelect.handleKeyPress(e)
     }
@@ -1184,7 +1667,8 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
       updateFooter()
     } else if (e.name === "s") {
       themeSelect.setSelectedIndex(themeIndex)
-      updateModalViewLabel()
+      viewSelect.setSelectedIndex(diffView === "split" ? 1 : 0)
+      centerModal()
       settingsModal.visible = true
       themeSelect.focus()
       mode = "settings"
@@ -1209,7 +1693,7 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
     moveCursor(-1)
   } else if (e.name === "escape") {
     clearSelection()
-  } else if (e.name === "left") {
+  } else if (e.name === "left" && !singleFile) {
     clearSelection()
     focusedPanel = "tree"
     updateFileTree()
@@ -1227,6 +1711,18 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
         updateHeader()
       }
     }
+  } else if (e.name === "]") {
+    clearSelection()
+    jumpToHunk(1)
+  } else if (e.name === "[") {
+    clearSelection()
+    jumpToHunk(-1)
+  } else if (e.name === "c") {
+    clearSelection()
+    jumpToComment(1)
+  } else if (e.name === "C") {
+    clearSelection()
+    jumpToComment(-1)
   } else if (e.name === "n") {
     clearSelection()
     if (fileIndex < files.length - 1) switchFile(fileIndex + 1)
@@ -1235,7 +1731,7 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
     if (fileIndex > 0) switchFile(fileIndex - 1)
   } else if (e.name === "s") {
     themeSelect.setSelectedIndex(themeIndex)
-    updateModalViewLabel()
+    viewSelect.setSelectedIndex(diffView === "split" ? 1 : 0)
     settingsModal.visible = true
     themeSelect.focus()
     mode = "settings"
@@ -1250,6 +1746,9 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 updateHeader()
+updateTreeHeader()
 updateFileTree()
 updateFooter()
-setTimeout(() => applyCommentColorsForCurrentFile(), 100)
+cursorLine = firstContentRawIdx()
+prevCursorLine = cursorLine
+applyCommentColorsForCurrentFile()

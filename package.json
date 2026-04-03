@@ -1,8 +1,13 @@
 {
-  "name": "revu",
+  "name": "revu-cli",
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts",
+    "build": "bun build --compile --minify index.ts --outfile revu-bin"
+  },
   "bin": {
     "revu": "index.ts"
   },
