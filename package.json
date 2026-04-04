@@ -1,6 +1,6 @@
 {
   "name": "@kud/revu-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Interactive terminal diff reviewer",
   "module": "index.ts",
   "type": "module",
@@ -21,10 +21,10 @@
     "build:all": "bun run build:darwin-arm64 && bun run build:darwin-x64 && bun run build:linux-x64 && bun run build:linux-arm64"
   },
   "optionalDependencies": {
-    "@kud/revu-cli-darwin-arm64": "1.0.0",
-    "@kud/revu-cli-darwin-x64": "1.0.0",
-    "@kud/revu-cli-linux-x64": "1.0.0",
-    "@kud/revu-cli-linux-arm64": "1.0.0"
+    "@kud/revu-cli-darwin-arm64": "1.0.1",
+    "@kud/revu-cli-darwin-x64": "1.0.1",
+    "@kud/revu-cli-linux-x64": "1.0.1",
+    "@kud/revu-cli-linux-arm64": "1.0.1"
   },
   "devDependencies": {
     "@types/bun": "latest"
