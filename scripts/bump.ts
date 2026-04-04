@@ -36,7 +36,8 @@ const files = [
 ].join(" ")
 
 await Bun.$`git -C ${root} add ${files.split(" ")}`
-await Bun.$`git -C ${root} commit -m "🔖 chore(release): bump to ${next}"`
+const msg = `🔖 chore(release): bump to ${next}`
+await Bun.$`git -C ${root} commit -m ${msg}`
 await Bun.$`git -C ${root} tag v${next}`
 await Bun.$`git -C ${root} push origin main --tags`
 
