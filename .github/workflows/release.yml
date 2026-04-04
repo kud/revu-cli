@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build ${{ matrix.target }}
@@ -15,10 +18,6 @@ jobs:
           - target: darwin-arm64
             runner: macos-latest
             pkg_dir: npm-packages/darwin-arm64
-
-          - target: darwin-x64
-            runner: macos-13
-            pkg_dir: npm-packages/darwin-x64
 
           - target: linux-x64
             runner: ubuntu-latest
@@ -73,18 +72,15 @@ jobs:
       - name: Move binaries into place
         run: |
           chmod +x revu-bin-darwin-arm64/revu-bin
-          chmod +x revu-bin-darwin-x64/revu-bin
           chmod +x revu-bin-linux-x64/revu-bin
           chmod +x revu-bin-linux-arm64/revu-bin
           mv revu-bin-darwin-arm64/revu-bin npm-packages/darwin-arm64/revu-bin
-          mv revu-bin-darwin-x64/revu-bin   npm-packages/darwin-x64/revu-bin
           mv revu-bin-linux-x64/revu-bin    npm-packages/linux-x64/revu-bin
           mv revu-bin-linux-arm64/revu-bin  npm-packages/linux-arm64/revu-bin
 
       - name: Publish platform packages
         run: |
           cd npm-packages/darwin-arm64 && npm publish --access public && cd ../..
-          cd npm-packages/darwin-x64   && npm publish --access public && cd ../..
           cd npm-packages/linux-x64    && npm publish --access public && cd ../..
           cd npm-packages/linux-arm64  && npm publish --access public && cd ../..
 

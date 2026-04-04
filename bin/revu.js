@@ -6,16 +6,22 @@ const require = createRequire(import.meta.url)
 
 const PACKAGES = {
   "darwin-arm64": "@kud/revu-cli-darwin-arm64",
-  "darwin-x64": "@kud/revu-cli-darwin-x64",
   "linux-x64": "@kud/revu-cli-linux-x64",
   "linux-arm64": "@kud/revu-cli-linux-arm64",
 }
 
-const platform = `${process.platform}-${process.arch}`
+// Intel Macs run the arm64 binary via Rosetta
+const platform =
+  process.platform === "darwin" && process.arch === "x64"
+    ? "darwin-arm64"
+    : `${process.platform}-${process.arch}`
+
 const pkg = PACKAGES[platform]
 
 if (!pkg) {
-  console.error(`revu-cli: unsupported platform: ${platform}`)
+  console.error(
+    `revu-cli: unsupported platform: ${process.platform}-${process.arch}`,
+  )
   process.exit(1)
 }
 
