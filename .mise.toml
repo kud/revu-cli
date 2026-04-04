@@ -12,3 +12,15 @@ description = "Run revu — optionally pass a repo path: mise run start -- /path
 [tasks.build]
 run = "bun build index.ts --compile --minify --outfile revu-bin"
 description = "Compile revu to a standalone binary"
+
+[tasks."bump:patch"]
+run = "bun scripts/bump.ts patch"
+description = "Bump patch version, commit, tag, and push — triggers CI release"
+
+[tasks."bump:minor"]
+run = "bun scripts/bump.ts minor"
+description = "Bump minor version, commit, tag, and push — triggers CI release"
+
+[tasks."bump:major"]
+run = "bun scripts/bump.ts major"
+description = "Bump major version, commit, tag, and push — triggers CI release"
