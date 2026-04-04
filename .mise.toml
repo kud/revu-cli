@@ -18,7 +18,7 @@ run = "zsh {{config_root}}/scripts/demo.sh --record"
 description = "Record a demo session to assets/demo.cast"
 
 [tasks."demo:record:upload"]
-run = "zsh {{config_root}}/scripts/demo.sh --record && zsh {{config_root}}/scripts/demo.sh --upload"
+run = "zsh {{config_root}}/scripts/demo.sh --record --upload"
 description = "Record a demo session and upload to asciinema.org"
 
 [tasks."demo:upload"]

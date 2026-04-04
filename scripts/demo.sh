@@ -11,7 +11,7 @@ done
 
 CAST_OUT="${SCRIPT_DIR}/../assets/demo.cast"
 
-if $UPLOAD; then
+if $UPLOAD && ! $RECORD; then
   asciinema upload "$CAST_OUT"
   exit 0
 fi
@@ -19,8 +19,16 @@ fi
 if $RECORD; then
   asciinema rec "$CAST_OUT" --overwrite --command "zsh $0"
   echo ""
+  echo "Processing cast…"
+  bun "${SCRIPT_DIR}/process-cast.js" "$CAST_OUT"
   echo "Generating GIF…"
-  agg "$CAST_OUT" "${SCRIPT_DIR}/../assets/demo.gif"
+  if $UPLOAD; then
+    agg "$CAST_OUT" "${SCRIPT_DIR}/../assets/demo.gif" &
+    asciinema upload "$CAST_OUT" &
+    wait
+  else
+    agg "$CAST_OUT" "${SCRIPT_DIR}/../assets/demo.gif"
+  fi
   echo "Written: assets/demo.gif"
   exit 0
 fi
