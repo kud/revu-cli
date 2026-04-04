@@ -16,7 +16,7 @@ const next =
       ? `${major}.${minor + 1}.0`
       : `${major}.${minor}.${patch + 1}`
 
-const platforms = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"]
+const platforms = ["darwin-arm64", "linux-x64", "linux-arm64"]
 
 rootPkg.version = next
 for (const p of platforms)
