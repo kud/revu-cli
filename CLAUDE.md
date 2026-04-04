@@ -1,3 +1,10 @@
+## Cross-project sync
+
+`DEFAULT_EXPORT_PROMPT` in `index.ts` is duplicated in `~/Projects/revu-vscode/src/extension.ts` (`DEFAULT_PROMPT`). If you change it in one, change it in the other. A shared package was considered but rejected as premature.
+
+The `.revu.json` schema `{ prompt, comments: [{ file, startLine, endLine, text }] }` is the shared contract between both tools — do not change it unilaterally.
+
+---
 
 Default to using Bun instead of Node.js.
 

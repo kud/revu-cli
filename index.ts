@@ -36,12 +36,13 @@ Keys:
   n p                           Next / prev file
   { }                           Scroll annotation preview up / down
   ←                             Back to file tree
-  e                             Export annotations to revu-output.md
+  e                             Export annotations to revu-review.md (with optional AI prompt)
   s                             Settings (theme, view)
   q                             Quit
 
-Config:
-  revu.json in the target repo  { "outputFilename": "my-review.md" }`)
+Files:
+  .revu.json                    Autosaved annotations (JSON) — do not edit manually
+  revu-review.md                Markdown export for AI review (press e to generate)`)
   process.exit(0)
 }
 
@@ -135,24 +136,12 @@ if (!fullDiff.trim()) {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-interface RevuConfig {
-  outputFilename?: string
-}
-
-const loadConfig = async (): Promise<RevuConfig> => {
-  const configPath = `${targetDir}/revu.json`
-  try {
-    const file = Bun.file(configPath)
-    if (await file.exists()) return (await file.json()) as RevuConfig
-  } catch {}
-  return {}
-}
-
-const revuConfig = await loadConfig()
-const rawOutputFilename = revuConfig.outputFilename ?? "revu-output.md"
-let outputFilename = rawOutputFilename.endsWith(".md")
-  ? rawOutputFilename
-  : `${rawOutputFilename}.md`
+const AUTOSAVE_PATH = `${targetDir}/.revu.json`
+const EXPORT_PATH = `${targetDir}/revu-review.md`
+const DEFAULT_EXPORT_PROMPT =
+  "Code review — inline annotations per file and line. " +
+  "Each annotation is an issue, question, or required change. " +
+  "Implement all changes."
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -620,55 +609,55 @@ const commentKey = (file: string, startLine: number, endLine?: number) =>
     ? `${file}:${Math.min(startLine, endLine)}-${Math.max(startLine, endLine)}`
     : `${file}:${startLine}`
 
-const loadCommentsFromExport = async (): Promise<void> => {
-  const exportFile = Bun.file(`${targetDir}/${outputFilename}`)
-  if (!(await exportFile.exists())) return
-  const lines = (await exportFile.text()).split("\n")
-  let currentFile = ""
-  let startLine = 0
-  let endLine = 0
-  let commentLines: string[] = []
-  const flush = () => {
-    if (currentFile && startLine > 0 && commentLines.length > 0) {
-      const key = commentKey(
-        currentFile,
-        startLine,
-        endLine !== startLine ? endLine : undefined,
-      )
-      comments.set(key, commentLines.join("\n").trim())
-    }
-    commentLines = []
-  }
-  for (const line of lines) {
-    if (line.startsWith("## `") && line.endsWith("`")) {
-      flush()
-      currentFile = line.slice(4, -1)
-      startLine = 0
-      endLine = 0
-    } else if (line.startsWith("### Lines ")) {
-      flush()
-      const [s, e] = line.slice(10).split("–")
-      startLine = parseInt(s!, 10)
-      endLine = parseInt(e!, 10)
-    } else if (line.startsWith("### Line ")) {
-      flush()
-      startLine = parseInt(line.slice(9), 10)
-      endLine = startLine
-    } else if (line.startsWith("> ")) {
-      commentLines.push(line.slice(2))
-    } else if (
-      commentLines.length > 0 &&
-      line !== "" &&
-      !line.startsWith("#") &&
-      !line.startsWith("```")
-    ) {
-      commentLines.push(line)
-    }
-  }
-  flush()
+interface SavedComment {
+  file: string
+  startLine: number
+  endLine: number
+  text: string
 }
 
-await loadCommentsFromExport()
+let savedPrompt = DEFAULT_EXPORT_PROMPT
+
+const loadComments = async (): Promise<void> => {
+  try {
+    const file = Bun.file(AUTOSAVE_PATH)
+    if (!(await file.exists())) return
+    const data = (await file.json()) as {
+      prompt?: string
+      comments: SavedComment[]
+    }
+    if (data.prompt) savedPrompt = data.prompt
+    for (const c of data.comments ?? []) {
+      const key = commentKey(
+        c.file,
+        c.startLine,
+        c.endLine !== c.startLine ? c.endLine : undefined,
+      )
+      comments.set(key, c.text)
+    }
+  } catch {}
+}
+
+const saveComments = async (prompt?: string): Promise<void> => {
+  if (prompt !== undefined) savedPrompt = prompt
+  const saved: SavedComment[] = []
+  for (const [key, text] of comments) {
+    const colonIdx = key.indexOf(":")
+    const file = key.slice(0, colonIdx)
+    const rest = key.slice(colonIdx + 1)
+    const dash = rest.indexOf("-")
+    const startLine =
+      dash === -1 ? parseInt(rest, 10) : parseInt(rest.slice(0, dash), 10)
+    const endLine = dash === -1 ? startLine : parseInt(rest.slice(dash + 1), 10)
+    saved.push({ file, startLine, endLine, text })
+  }
+  await Bun.write(
+    AUTOSAVE_PATH,
+    JSON.stringify({ prompt: savedPrompt, comments: saved }, null, 2) + "\n",
+  )
+}
+
+await loadComments()
 
 const isLineCommented = (file: string, lineNum: number): boolean => {
   for (const key of comments.keys()) {
@@ -717,23 +706,17 @@ const loadSettings = () => {
       return {}
     }
   })()
-  const merged = { ...global, ...revuConfig }
   return {
     themeIndex:
-      typeof merged.themeIndex === "number"
-        ? Math.min(merged.themeIndex, THEMES.length - 1)
+      typeof global.themeIndex === "number"
+        ? Math.min(global.themeIndex, THEMES.length - 1)
         : 0,
     diffView:
-      merged.diffView === "split" ? ("split" as const) : ("unified" as const),
+      global.diffView === "split" ? ("split" as const) : ("unified" as const),
   }
 }
 
 const saveSettings = async () => {
-  const repoConfig: RevuConfig = { outputFilename }
-  await Bun.write(
-    `${targetDir}/revu.json`,
-    JSON.stringify(repoConfig, null, 2) + "\n",
-  )
   await Bun.write(
     SETTINGS_PATH,
     JSON.stringify({ themeIndex, diffView }, null, 2),
@@ -751,7 +734,7 @@ let cursorLine = 0
 let prevCursorLine = 0
 let selectionAnchor: number | null = null
 let focusedPanel: "tree" | "diff" = "tree"
-type Mode = "normal" | "comment" | "settings"
+type Mode = "normal" | "comment" | "settings" | "export"
 let mode: Mode = "normal"
 let commentTargetLine = 0
 let commentTargetEndLine = 0
@@ -1003,7 +986,7 @@ const footerPosition = new TextRenderable(renderer, { content: "", width: 24 })
 footerPosition.fg = theme().mutedFg
 
 const MODAL_W = 46
-const MODAL_H = THEMES.length + 9
+const MODAL_H = THEMES.length + 7
 const settingsModal = new BoxRenderable(renderer, {
   width: MODAL_W,
   height: MODAL_H,
@@ -1019,6 +1002,31 @@ const centerModal = () => {
   const top = Math.max(0, Math.floor((renderer.terminalHeight - MODAL_H) / 2))
   const left = Math.max(0, Math.floor((renderer.terminalWidth - MODAL_W) / 2))
   settingsModal.setPosition({ top, left })
+}
+
+const EXPORT_MODAL_W = 60
+const EXPORT_MODAL_H = 8
+const exportModal = new BoxRenderable(renderer, {
+  width: EXPORT_MODAL_W,
+  height: EXPORT_MODAL_H,
+  flexDirection: "column",
+  backgroundColor: theme().bg,
+  border: true,
+  borderColor: theme().modalBorder,
+  position: "absolute",
+  visible: false,
+  zIndex: 10,
+})
+const centerExportModal = () => {
+  const top = Math.max(
+    0,
+    Math.floor((renderer.terminalHeight - EXPORT_MODAL_H) / 2),
+  )
+  const left = Math.max(
+    0,
+    Math.floor((renderer.terminalWidth - EXPORT_MODAL_W) / 2),
+  )
+  exportModal.setPosition({ top, left })
 }
 
 const modalTitle = new TextRenderable(renderer, {
@@ -1068,22 +1076,6 @@ const viewSelect = new SelectRenderable(renderer, {
   focusedTextColor: theme().modalFg,
 })
 
-const modalOutputLabel = new TextRenderable(renderer, {
-  content: "  Output file",
-  width: "100%",
-  height: 1,
-})
-modalOutputLabel.fg = theme().mutedFg
-
-const modalOutputInput = new TextareaRenderable(renderer, {
-  width: "100%",
-  height: 1,
-  paddingLeft: 2,
-})
-modalOutputInput.textColor = theme().modalFg
-modalOutputInput.backgroundColor = RGBA.fromValues(0, 0, 0, 0)
-modalOutputInput.setText(outputFilename)
-
 const modalHint = new TextRenderable(renderer, {
   width: "100%",
   height: 1,
@@ -1102,9 +1094,48 @@ settingsModal.add(modalThemeLabel)
 settingsModal.add(themeSelect)
 settingsModal.add(modalViewLabel)
 settingsModal.add(viewSelect)
-settingsModal.add(modalOutputLabel)
-settingsModal.add(modalOutputInput)
 settingsModal.add(modalHint)
+
+const exportModalTitle = new TextRenderable(renderer, {
+  content: "  Export to Markdown",
+  width: "100%",
+  height: 1,
+})
+exportModalTitle.fg = theme().headerFg
+exportModalTitle.backgroundColor = theme().headerBg
+
+const exportModalLabel = new TextRenderable(renderer, {
+  content: "  AI prompt  (optional — prepended to the review)",
+  width: "100%",
+  height: 1,
+})
+exportModalLabel.fg = theme().mutedFg
+
+const exportPromptInput = new TextareaRenderable(renderer, {
+  width: "100%",
+  height: 3,
+  paddingLeft: 2,
+})
+exportPromptInput.textColor = theme().modalFg
+exportPromptInput.backgroundColor = RGBA.fromValues(0, 0, 0, 0)
+
+const exportModalHint = new TextRenderable(renderer, {
+  width: "100%",
+  height: 1,
+})
+exportModalHint.fg = theme().mutedFg
+const updateExportModalHint = () => {
+  const w = fg("#ffffff")
+  const d = dim
+  const s = d("  ·  ")
+  exportModalHint.content = t`  ${w("↵")} ${d("export")}${s}${w("esc")} ${d("cancel")}`
+}
+updateExportModalHint()
+
+exportModal.add(exportModalTitle)
+exportModal.add(exportModalLabel)
+exportModal.add(exportPromptInput)
+exportModal.add(exportModalHint)
 
 headerBox.add(headerText)
 commentBarBox.add(commentLabel)
@@ -1118,6 +1149,7 @@ rootBox.add(mainArea)
 rootBox.add(footerBox)
 renderer.root.add(rootBox)
 renderer.root.add(settingsModal)
+renderer.root.add(exportModal)
 
 // ── Scroll helpers ────────────────────────────────────────────────────────────
 
@@ -1325,9 +1357,9 @@ const updateFooter = () => {
     return
   }
   if (focusedPanel === "tree") {
-    footerText.content = t`  ${hi("↑↓")} ${dim("files")}${sep}${hi("↵")} ${dim("open")}${sep}${hi("e")} ${dim(`export → ${outputFilename}`)}${sep}${hi("s")} ${dim("settings")}${sep}${hi("q")} ${dim("quit")}`
+    footerText.content = t`  ${hi("↑↓")} ${dim("files")}${sep}${hi("↵")} ${dim("open")}${sep}${hi("e")} ${dim("export → revu-review.md")}${sep}${hi("s")} ${dim("settings")}${sep}${hi("q")} ${dim("quit")}`
   } else {
-    footerText.content = t`  ${hi("↑↓")} ${dim("move")}${sep}${hi("shift+↑↓")} ${dim("select")}${sep}${hi("↵")} ${dim("annotate")}${sep}${hi("e")} ${dim(`export → ${outputFilename}`)}${sep}${hi("q")} ${dim("quit")}`
+    footerText.content = t`  ${hi("↑↓")} ${dim("move")}${sep}${hi("shift+↑↓")} ${dim("select")}${sep}${hi("↵")} ${dim("annotate")}${sep}${hi("e")} ${dim("export → revu-review.md")}${sep}${hi("q")} ${dim("quit")}`
   }
   footerText.fg = theme().mutedFg
 }
@@ -1530,9 +1562,14 @@ const applyTheme = () => {
   modalTitle.backgroundColor = t.headerBg
   modalThemeLabel.fg = t.mutedFg
   modalViewLabel.fg = t.mutedFg
-  modalOutputLabel.fg = t.mutedFg
-  modalOutputInput.textColor = t.modalFg
   modalHint.fg = t.mutedFg
+  exportModal.backgroundColor = t.bg
+  exportModal.borderColor = t.modalBorder
+  exportModalTitle.fg = t.headerFg
+  exportModalTitle.backgroundColor = t.headerBg
+  exportModalLabel.fg = t.mutedFg
+  exportPromptInput.textColor = t.modalFg
+  exportModalHint.fg = t.mutedFg
   themeSelect.backgroundColor = t.bg
   themeSelect.textColor = t.modalFg
   themeSelect.focusedBackgroundColor = t.addedBg
@@ -1570,7 +1607,7 @@ const getRangeContent = (
   return result.join("\n")
 }
 
-const exportComments = async () => {
+const exportToMarkdown = async (prompt: string) => {
   if (comments.size === 0) {
     footerText.content = `  ✗ No comments to export`
     footerText.fg = theme().commentMark
@@ -1592,11 +1629,11 @@ const exportComments = async () => {
     if (!byFile.has(file)) byFile.set(file, [])
     byFile.get(file)!.push({ startLine, endLine, comment })
   }
-  const sections = [
+  const reviewSections = [
     `# Code Review\n\nGenerated by revu on ${new Date().toISOString()}\n`,
   ]
   for (const [file, entries] of byFile) {
-    sections.push(`## \`${file}\`\n`)
+    reviewSections.push(`## \`${file}\`\n`)
     const fd = fileDiffs.find((f) => f.file === file)
     const ext = file.split(".").pop()?.toLowerCase() ?? ""
     for (const { startLine, endLine, comment } of entries.sort(
@@ -1612,11 +1649,12 @@ const exportComments = async () => {
         .split("\n")
         .map((l) => `> ${l}`)
         .join("\n")
-      sections.push(`### ${lineRef}\n${codeBlock}${commentText}\n`)
+      reviewSections.push(`### ${lineRef}\n${codeBlock}${commentText}\n`)
     }
   }
-  await Bun.write(`${targetDir}/${outputFilename}`, sections.join("\n"))
-  footerText.content = `  ✓ Exported to ${outputFilename}`
+  const header = prompt.trim() ? `${prompt.trim()}\n\n---\n\n` : ""
+  await Bun.write(EXPORT_PATH, header + reviewSections.join("\n"))
+  footerText.content = `  ✓ Exported to revu-review.md`
   footerText.fg = theme().successFg
   setTimeout(() => updateFooter(), 3000)
 }
@@ -1681,6 +1719,7 @@ commentInput.onSubmit = () => {
   applyCommentColorsForCurrentFile()
   updateFileTree()
   updateHeader()
+  saveComments()
 }
 
 // ── Keyboard ──────────────────────────────────────────────────────────────────
@@ -1696,18 +1735,14 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
     if (e.name === "escape") {
       themeSelect.blur()
       viewSelect.blur()
-      modalOutputInput.blur()
       settingsModal.visible = false
       mode = "normal"
     } else if (e.name === "tab") {
       if (themeSelect.focused) {
         themeSelect.blur()
         viewSelect.focus()
-      } else if (viewSelect.focused) {
-        viewSelect.blur()
-        modalOutputInput.focus()
       } else {
-        modalOutputInput.blur()
+        viewSelect.blur()
         themeSelect.focus()
       }
     } else if (
@@ -1715,32 +1750,44 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
       e.name === "enter" ||
       e.sequence === "\r"
     ) {
-      if (modalOutputInput.focused) {
-        const raw = modalOutputInput.plainText.trim()
-        if (raw) {
-          outputFilename = raw.endsWith(".md") ? raw : `${raw}.md`
-          modalOutputInput.setText(outputFilename)
-        }
-        modalOutputInput.blur()
-        themeSelect.focus()
-      } else {
-        themeIndex = themeSelect.getSelectedIndex()
-        diffView = viewSelect.getSelectedIndex() === 1 ? "split" : "unified"
-        diffRenderable.view = diffView
-        themeSelect.blur()
-        viewSelect.blur()
-        settingsModal.visible = false
-        mode = "normal"
-        applyTheme()
-        saveSettings()
-        updateFooter()
-      }
-    } else if (modalOutputInput.focused) {
-      modalOutputInput.handleKeyPress(e)
+      themeIndex = themeSelect.getSelectedIndex()
+      diffView = viewSelect.getSelectedIndex() === 1 ? "split" : "unified"
+      diffRenderable.view = diffView
+      themeSelect.blur()
+      viewSelect.blur()
+      settingsModal.visible = false
+      mode = "normal"
+      applyTheme()
+      saveSettings()
+      updateFooter()
     } else if (viewSelect.focused) {
       viewSelect.handleKeyPress(e)
     } else {
       themeSelect.handleKeyPress(e)
+    }
+    return
+  }
+
+  if (mode === "export") {
+    e.stopPropagation()
+    if (e.name === "escape") {
+      exportPromptInput.blur()
+      exportModal.visible = false
+      mode = "normal"
+    } else if (
+      e.name === "return" ||
+      e.name === "enter" ||
+      e.sequence === "\r"
+    ) {
+      const prompt = exportPromptInput.plainText.trim()
+      exportPromptInput.blur()
+      exportModal.visible = false
+      mode = "normal"
+      exportPromptInput.setText("")
+      saveComments(prompt)
+      exportToMarkdown(prompt)
+    } else {
+      exportPromptInput.handleKeyPress(e)
     }
     return
   }
@@ -1769,7 +1816,17 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
       themeSelect.focus()
       mode = "settings"
     } else if (e.name === "e" || e.name === "w") {
-      exportComments()
+      if (comments.size === 0) {
+        footerText.content = `  ✗ No comments to export`
+        footerText.fg = theme().commentMark
+        setTimeout(() => updateFooter(), 2000)
+      } else {
+        centerExportModal()
+        exportModal.visible = true
+        exportPromptInput.setText(savedPrompt)
+        exportPromptInput.focus()
+        mode = "export"
+      }
     } else if (e.name === "q") {
       renderer.destroy()
       process.exit(0)
@@ -1805,6 +1862,7 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
         applyCommentColorsForCurrentFile()
         updateFileTree()
         updateHeader()
+        saveComments()
       }
     }
   } else if (e.name === "}") {
@@ -1841,7 +1899,16 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
     themeSelect.focus()
     mode = "settings"
   } else if (e.name === "e" || e.name === "w") {
-    exportComments()
+    if (comments.size === 0) {
+      footerText.content = `  ✗ No comments to export`
+      footerText.fg = theme().commentMark
+      setTimeout(() => updateFooter(), 2000)
+    } else {
+      centerExportModal()
+      exportModal.visible = true
+      exportPromptInput.focus()
+      mode = "export"
+    }
   } else if (e.name === "q") {
     renderer.destroy()
     process.exit(0)
