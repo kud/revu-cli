@@ -1,6 +1,6 @@
 {
   "name": "@kud/revu-cli-linux-arm64",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "revu-cli binary for Linux ARM64",
   "os": [
     "linux"
