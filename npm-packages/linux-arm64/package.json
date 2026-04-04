@@ -11,5 +11,9 @@
   "files": [
     "revu-bin"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kud/revu-cli"
+  }
 }

@@ -80,9 +80,9 @@ jobs:
 
       - name: Publish platform packages
         run: |
-          cd npm-packages/darwin-arm64 && npm publish --access public && cd ../..
-          cd npm-packages/linux-x64    && npm publish --access public && cd ../..
-          cd npm-packages/linux-arm64  && npm publish --access public && cd ../..
+          (cd npm-packages/darwin-arm64 && npm publish --access public)
+          (cd npm-packages/linux-x64    && npm publish --access public)
+          (cd npm-packages/linux-arm64  && npm publish --access public)
 
       - name: Publish revu-cli
         run: npm publish --access public
