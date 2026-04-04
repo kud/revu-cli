@@ -44,10 +44,7 @@ revu --against main
 
 ## Config
 
-Place a `revu.json` in your repo to override the output filename:
+Press `s` inside revu to open settings. Changes are saved automatically:
 
-```json
-{ "outputFilename": "my-review.md" }
-```
-
-Global settings (theme, view) are stored in `~/.config/revu/settings.json`.
+- **Global** (theme, view mode) → `~/.config/revu/settings.json`
+- **Per-repo** (output filename) → `revu.json` in the repo root
