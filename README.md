@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/revu-logo.png" width="120" alt="revu logo" />
+  <img src="assets/revu-logo.png" width="200" alt="revu logo" />
 </p>
 
 # revu
