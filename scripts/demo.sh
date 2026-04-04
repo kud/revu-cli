@@ -198,4 +198,4 @@ if [[ ! -f "$REVU_BIN" ]]; then
   REVU_BIN="$(dirname "$0")/../revu-bin"
 fi
 
-exec "$REVU_BIN"
+exec "$REVU_BIN" 2>/dev/null
