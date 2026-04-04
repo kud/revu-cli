@@ -7,7 +7,7 @@
 Interactive terminal diff reviewer. Annotate diffs, export reviews to Markdown.
 
 <p align="center">
-  <a href="https://asciinema.org/a/hIX8o5Z5BYGjffOZ">
+  <a href="https://asciinema.org/a/J4sEsjyCGSp6IXVc">
     <img src="assets/demo.gif" alt="revu demo" />
   </a>
 </p>
