@@ -30,4 +30,14 @@ for (const p of platforms) {
   await Bun.write(path, JSON.stringify(pkg, null, 2) + "\n")
 }
 
-console.log(`bumped all packages to ${next}`)
+const files = [
+  "package.json",
+  ...platforms.map((p) => `npm-packages/${p}/package.json`),
+].join(" ")
+
+await Bun.$`git -C ${root} add ${files.split(" ")}`
+await Bun.$`git -C ${root} commit -m "🔖 chore(release): bump to ${next}"`
+await Bun.$`git -C ${root} tag v${next}`
+await Bun.$`git -C ${root} push origin main --tags`
+
+console.log(`✓ released v${next}`)
