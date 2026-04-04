@@ -9,6 +9,14 @@ description = "Run revu in hot-reload mode for development"
 run = "bun {{config_root}}/index.ts"
 description = "Run revu — optionally pass a repo path: mise run start -- /path/to/repo"
 
+[tasks.demo]
+run = "zsh {{config_root}}/scripts/demo.sh"
+description = "Launch revu with fake staged diffs for testing"
+
+[tasks."demo:record"]
+run = "zsh {{config_root}}/scripts/demo.sh --record"
+description = "Record a demo session to assets/demo.cast"
+
 [tasks.build]
 run = "bun build index.ts --compile --minify --outfile revu-bin"
 description = "Compile revu to a standalone binary"

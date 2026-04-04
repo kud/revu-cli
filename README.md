@@ -6,6 +6,12 @@
 
 Interactive terminal diff reviewer. Annotate diffs, export reviews to Markdown.
 
+<p align="center">
+  <a href="https://asciinema.org/a/eSR5dbUhDjWcxkvz">
+    <img src="https://asciinema.org/a/eSR5dbUhDjWcxkvz.svg" alt="revu demo" width="700" />
+  </a>
+</p>
+
 ## Install
 
 ```sh
