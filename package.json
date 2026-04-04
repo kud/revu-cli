@@ -1,11 +1,11 @@
 {
-  "name": "revu-cli",
+  "name": "@kud/revu-cli",
   "version": "1.0.0",
   "description": "Interactive terminal diff reviewer",
   "module": "index.ts",
   "type": "module",
   "bin": {
-    "revu": "./bin/revu.js"
+    "revu": "bin/revu.js"
   },
   "files": [
     "bin/"

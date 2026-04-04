@@ -9,7 +9,7 @@ Interactive terminal diff reviewer. Annotate diffs, export reviews to Markdown.
 ## Install
 
 ```sh
-npm install -g revu-cli
+npm install -g @kud/revu-cli
 ```
 
 ## Usage
