@@ -18,6 +18,10 @@ fi
 
 if $RECORD; then
   asciinema rec "$CAST_OUT" --overwrite --command "zsh $0"
+  echo ""
+  echo "Generating GIF…"
+  agg "$CAST_OUT" "${SCRIPT_DIR}/../assets/demo.gif"
+  echo "Written: assets/demo.gif"
   exit 0
 fi
 
