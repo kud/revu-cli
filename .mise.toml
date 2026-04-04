@@ -17,6 +17,14 @@ description = "Launch revu with fake staged diffs for testing"
 run = "zsh {{config_root}}/scripts/demo.sh --record"
 description = "Record a demo session to assets/demo.cast"
 
+[tasks."demo:record:upload"]
+run = "zsh {{config_root}}/scripts/demo.sh --record && zsh {{config_root}}/scripts/demo.sh --upload"
+description = "Record a demo session and upload to asciinema.org"
+
+[tasks."demo:upload"]
+run = "zsh {{config_root}}/scripts/demo.sh --upload"
+description = "Upload assets/demo.cast to asciinema.org"
+
 [tasks.build]
 run = "bun build index.ts --compile --minify --outfile revu-bin"
 description = "Compile revu to a standalone binary"

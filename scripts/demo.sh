@@ -3,16 +3,21 @@ set -e
 
 SCRIPT_DIR="${0:A:h}"
 RECORD=false
+UPLOAD=false
 for arg in "$@"; do
   [[ "$arg" == "--record" ]] && RECORD=true
+  [[ "$arg" == "--upload" ]] && UPLOAD=true
 done
 
-if $RECORD; then
-  CAST_OUT="${SCRIPT_DIR}/../assets/demo.cast"
-  asciinema rec "$CAST_OUT" --overwrite --command "zsh $0"
-  echo ""
-  echo "Uploading to asciinema.org…"
+CAST_OUT="${SCRIPT_DIR}/../assets/demo.cast"
+
+if $UPLOAD; then
   asciinema upload "$CAST_OUT"
+  exit 0
+fi
+
+if $RECORD; then
+  asciinema rec "$CAST_OUT" --overwrite --command "zsh $0"
   exit 0
 fi
 
