@@ -14,26 +14,18 @@ jobs:
         include:
           - target: darwin-arm64
             runner: macos-latest
-            bun_target: bun-darwin-arm64
-            pkg: "@kud/revu-cli-darwin-arm64"
             pkg_dir: npm-packages/darwin-arm64
 
           - target: darwin-x64
             runner: macos-13
-            bun_target: bun-darwin-x64
-            pkg: "@kud/revu-cli-darwin-x64"
             pkg_dir: npm-packages/darwin-x64
 
           - target: linux-x64
             runner: ubuntu-latest
-            bun_target: bun-linux-x64
-            pkg: "@kud/revu-cli-linux-x64"
             pkg_dir: npm-packages/linux-x64
 
           - target: linux-arm64
             runner: ubuntu-24.04-arm
-            bun_target: bun-linux-arm64
-            pkg: "@kud/revu-cli-linux-arm64"
             pkg_dir: npm-packages/linux-arm64
 
     steps:
@@ -60,13 +52,16 @@ jobs:
     name: Publish to npm
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - name: Download all binaries
@@ -92,10 +87,6 @@ jobs:
           cd npm-packages/darwin-x64   && npm publish --access public && cd ../..
           cd npm-packages/linux-x64    && npm publish --access public && cd ../..
           cd npm-packages/linux-arm64  && npm publish --access public && cd ../..
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish revu-cli
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
