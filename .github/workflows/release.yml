@@ -87,10 +87,6 @@ jobs:
           cd npm-packages/darwin-x64   && npm publish --access public && cd ../..
           cd npm-packages/linux-x64    && npm publish --access public && cd ../..
           cd npm-packages/linux-arm64  && npm publish --access public && cd ../..
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish revu-cli
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
