@@ -1,15 +1,53 @@
+<p align="center">
+  <img src="assets/revu-logo.png" width="120" alt="revu logo" />
+</p>
+
 # revu
 
-To install dependencies:
+Interactive terminal diff reviewer. Annotate diffs, export reviews to Markdown.
 
-```bash
-bun install
+## Install
+
+```sh
+npm install -g revu-cli
 ```
 
-To run:
+## Usage
 
-```bash
-bun run index.ts
+```sh
+# Review staged/unstaged changes in the current repo
+revu
+
+# Review a specific file
+revu src/foo.ts
+
+# Review all commits between a branch and HEAD (PR mode)
+revu --against main
 ```
 
-This project was created using `bun init` in bun v1.3.11. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Keys
+
+| Key          | Action                              |
+| ------------ | ----------------------------------- |
+| `↑↓` / `j k` | Move cursor                         |
+| `shift+↑↓`   | Select range                        |
+| `↵`          | Annotate line / range               |
+| `d`          | Delete annotation                   |
+| `] [`        | Next / prev hunk                    |
+| `c C`        | Next / prev annotation              |
+| `n p`        | Next / prev file                    |
+| `{ }`        | Scroll annotation preview           |
+| `←`          | Back to file tree                   |
+| `e`          | Export annotations to Markdown      |
+| `s`          | Settings (theme, view, output file) |
+| `q`          | Quit                                |
+
+## Config
+
+Place a `revu.json` in your repo to override the output filename:
+
+```json
+{ "outputFilename": "my-review.md" }
+```
+
+Global settings (theme, view) are stored in `~/.config/revu/settings.json`.

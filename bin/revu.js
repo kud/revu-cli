@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createRequire } from "module"
-import { execFileSync } from "child_process"
+import { spawnSync } from "child_process"
 
 const require = createRequire(import.meta.url)
 
@@ -29,8 +29,8 @@ try {
   process.exit(1)
 }
 
-try {
-  execFileSync(binaryPath, process.argv.slice(2), { stdio: "inherit" })
-} catch (err) {
-  process.exit(err.status ?? 1)
-}
+const result = spawnSync(binaryPath, process.argv.slice(2), {
+  stdio: "inherit",
+  windowsHide: true,
+})
+process.exit(result.status ?? 1)
