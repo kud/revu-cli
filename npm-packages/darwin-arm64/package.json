@@ -1,6 +1,6 @@
 {
   "name": "@kud/revu-cli-darwin-arm64",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "revu-cli binary for macOS ARM64",
   "os": [
     "darwin"
