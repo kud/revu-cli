@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { createRequire } from "module"
 import { spawnSync } from "child_process"
+import { fileURLToPath } from "url"
+import { join, dirname } from "path"
+import { existsSync } from "fs"
 
 const require = createRequire(import.meta.url)
 
@@ -29,10 +32,15 @@ let binaryPath
 try {
   binaryPath = require.resolve(`${pkg}/revu-bin`)
 } catch {
-  console.error(
-    `revu-cli: could not find binary for ${platform}. Try reinstalling revu-cli.`,
-  )
-  process.exit(1)
+  const localBin = join(dirname(fileURLToPath(import.meta.url)), "../revu-bin")
+  if (existsSync(localBin)) {
+    binaryPath = localBin
+  } else {
+    console.error(
+      `revu-cli: could not find binary for ${platform}. Try reinstalling revu-cli.`,
+    )
+    process.exit(1)
+  }
 }
 
 const result = spawnSync(binaryPath, process.argv.slice(2), {

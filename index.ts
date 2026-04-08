@@ -8,6 +8,7 @@ import {
   BoxRenderable,
   RGBA,
   SyntaxStyle,
+  getTreeSitterClient,
   type KeyEvent,
   t,
   fg,
@@ -604,16 +605,25 @@ const files = fileDiffs.map((f) => f.file)
 // Comments: keyed "file:N" for single line, "file:N-M" for range (N < M)
 const comments = new Map<string, string>()
 
-const commentKey = (file: string, startLine: number, endLine?: number) =>
-  endLine !== undefined && endLine !== startLine
-    ? `${file}:${Math.min(startLine, endLine)}-${Math.max(startLine, endLine)}`
-    : `${file}:${startLine}`
+const commentKey = (
+  file: string,
+  startLine: number,
+  endLine?: number,
+  side: "old" | "new" = "new",
+) => {
+  const lineStr =
+    endLine !== undefined && endLine !== startLine
+      ? `${Math.min(startLine, endLine)}-${Math.max(startLine, endLine)}`
+      : `${startLine}`
+  return `${file}:${side}:${lineStr}`
+}
 
 interface SavedComment {
   file: string
   startLine: number
   endLine: number
   text: string
+  side?: "old" | "new"
 }
 
 let savedPrompt = DEFAULT_EXPORT_PROMPT
@@ -632,6 +642,7 @@ const loadComments = async (): Promise<void> => {
         c.file,
         c.startLine,
         c.endLine !== c.startLine ? c.endLine : undefined,
+        c.side ?? "new",
       )
       comments.set(key, c.text)
     }
@@ -645,11 +656,15 @@ const saveComments = async (prompt?: string): Promise<void> => {
     const colonIdx = key.indexOf(":")
     const file = key.slice(0, colonIdx)
     const rest = key.slice(colonIdx + 1)
-    const dash = rest.indexOf("-")
+    const sideEnd = rest.indexOf(":")
+    const side = rest.slice(0, sideEnd) as "old" | "new"
+    const lineStr = rest.slice(sideEnd + 1)
+    const dash = lineStr.indexOf("-")
     const startLine =
-      dash === -1 ? parseInt(rest, 10) : parseInt(rest.slice(0, dash), 10)
-    const endLine = dash === -1 ? startLine : parseInt(rest.slice(dash + 1), 10)
-    saved.push({ file, startLine, endLine, text })
+      dash === -1 ? parseInt(lineStr, 10) : parseInt(lineStr.slice(0, dash), 10)
+    const endLine =
+      dash === -1 ? startLine : parseInt(lineStr.slice(dash + 1), 10)
+    saved.push({ file, startLine, endLine, text, side })
   }
   await Bun.write(
     AUTOSAVE_PATH,
@@ -659,16 +674,21 @@ const saveComments = async (prompt?: string): Promise<void> => {
 
 await loadComments()
 
-const isLineCommented = (file: string, lineNum: number): boolean => {
+const isLineCommented = (
+  file: string,
+  lineNum: number,
+  side: "old" | "new" = "new",
+): boolean => {
+  const prefix = `${file}:${side}:`
   for (const key of comments.keys()) {
-    if (!key.startsWith(`${file}:`)) continue
-    const rest = key.slice(file.length + 1)
-    const dash = rest.indexOf("-")
+    if (!key.startsWith(prefix)) continue
+    const lineStr = key.slice(prefix.length)
+    const dash = lineStr.indexOf("-")
     if (dash === -1) {
-      if (parseInt(rest, 10) === lineNum) return true
+      if (parseInt(lineStr, 10) === lineNum) return true
     } else {
-      const s = parseInt(rest.slice(0, dash), 10)
-      const e = parseInt(rest.slice(dash + 1), 10)
+      const s = parseInt(lineStr.slice(0, dash), 10)
+      const e = parseInt(lineStr.slice(dash + 1), 10)
       if (lineNum >= s && lineNum <= e) return true
     }
   }
@@ -678,16 +698,18 @@ const isLineCommented = (file: string, lineNum: number): boolean => {
 const findCommentKeyForLine = (
   file: string,
   lineNum: number,
+  side: "old" | "new" = "new",
 ): string | null => {
+  const prefix = `${file}:${side}:`
   for (const key of comments.keys()) {
-    if (!key.startsWith(`${file}:`)) continue
-    const rest = key.slice(file.length + 1)
-    const dash = rest.indexOf("-")
+    if (!key.startsWith(prefix)) continue
+    const lineStr = key.slice(prefix.length)
+    const dash = lineStr.indexOf("-")
     if (dash === -1) {
-      if (parseInt(rest, 10) === lineNum) return key
+      if (parseInt(lineStr, 10) === lineNum) return key
     } else {
-      const s = parseInt(rest.slice(0, dash), 10)
-      const e = parseInt(rest.slice(dash + 1), 10)
+      const s = parseInt(lineStr.slice(0, dash), 10)
+      const e = parseInt(lineStr.slice(dash + 1), 10)
       if (lineNum >= s && lineNum <= e) return key
     }
   }
@@ -738,6 +760,7 @@ type Mode = "normal" | "comment" | "settings" | "export"
 let mode: Mode = "normal"
 let commentTargetLine = 0
 let commentTargetEndLine = 0
+let commentTargetSide: "old" | "new" = "new"
 let previewScrollOffset = 0
 
 const getFiletype = (filename: string): string | undefined => {
@@ -923,6 +946,7 @@ const diffRenderable = new DiffRenderable(renderer, {
   removedBg: theme().removedBg,
   contextBg: RGBA.fromValues(0, 0, 0, 0),
   syntaxStyle: buildSyntaxStyle(theme()),
+  treeSitterClient: getTreeSitterClient(),
 })
 
 const diffColumn = new BoxRenderable(renderer, {
@@ -942,6 +966,10 @@ commentLabel.fg = theme().commentMark
 const commentInput = new TextareaRenderable(renderer, {
   flexGrow: 1,
   height: 3,
+  keyBindings: [
+    { name: "return", action: "submit" },
+    { name: "return", shift: true, action: "newline" },
+  ],
 })
 commentInput.textColor = theme().inputFg
 commentInput.backgroundColor = theme().inputBg
@@ -1280,20 +1308,30 @@ const jumpToComment = (dir: 1 | -1) => {
 
 const fileLineCount = () => currentFileDiff().lines.length
 
-const diffLineToFileLineNum = (lineIdx: number): number | null => {
+type DiffLineInfo = { lineNum: number; side: "old" | "new" }
+
+const diffLineToFileLineNum = (lineIdx: number): DiffLineInfo | null => {
   const lines = currentFileDiff().lines
-  let counter = 0
+  let newCounter = 0
+  let oldCounter = 0
   for (let i = 0; i <= lineIdx && i < lines.length; i++) {
     const l = lines[i]!
     if (l.startsWith("@@ ")) {
-      const m = l.match(/@@ -\d+(?:,\d+)? \+(\d+)/)
-      counter = m ? parseInt(m[1]!, 10) : counter
+      const m = l.match(/@@ -(\d+)(?:,\d+)? \+(\d+)/)
+      if (m) {
+        oldCounter = parseInt(m[1]!, 10)
+        newCounter = parseInt(m[2]!, 10)
+      }
     } else if (l.startsWith("+")) {
-      if (i === lineIdx) return counter
-      counter++
-    } else if (!l.startsWith("-")) {
-      if (i === lineIdx) return counter
-      if (l) counter++
+      if (i === lineIdx) return { lineNum: newCounter, side: "new" }
+      newCounter++
+    } else if (l.startsWith("-")) {
+      if (i === lineIdx) return { lineNum: oldCounter, side: "old" }
+      oldCounter++
+    } else if (l) {
+      if (i === lineIdx) return { lineNum: newCounter, side: "new" }
+      newCounter++
+      oldCounter++
     }
   }
   return null
@@ -1312,14 +1350,14 @@ const paintLine = (rawIdx: number) => {
   if (!isContentLine(lines[rawIdx] ?? "")) return
   const contentIdx = rawToContentIdx(rawIdx)
   const file = currentFileDiff().file
-  const lineNum = diffLineToFileLineNum(rawIdx)
+  const info = diffLineToFileLineNum(rawIdx)
   const sel = selectionRange()
   const inSel = sel !== null && rawIdx >= sel.start && rawIdx <= sel.end
   if (rawIdx === cursorLine) {
     diffRenderable.setLineColor(contentIdx, theme().cursorBg)
   } else if (inSel) {
     diffRenderable.setLineColor(contentIdx, theme().selectionBg)
-  } else if (lineNum !== null && isLineCommented(file, lineNum)) {
+  } else if (info !== null && isLineCommented(file, info.lineNum, info.side)) {
     diffRenderable.setLineColor(contentIdx, theme().commentedBg)
   } else {
     diffRenderable.clearLineColor(contentIdx)
@@ -1337,10 +1375,10 @@ const clearSelection = () => {
 const updateFooter = () => {
   updateCommentPreview()
   const hi = fg("#ffffff")
-  const sep = dim("  ·  ")
+  const sep = "  ·  "
   footerPosition.content = ""
   if (mode === "comment") {
-    footerText.content = t`  ${hi("⌥↵")} ${dim("submit")}${sep}${hi("esc")} ${dim("cancel")}`
+    footerText.content = t`  ${hi("↵")} submit${sep}${hi("shift+↵")} new line${sep}${hi("esc")} cancel`
     footerText.fg = theme().mutedFg
     return
   }
@@ -1350,16 +1388,16 @@ const updateFooter = () => {
     const endLN = diffLineToFileLineNum(sel.end)
     const rangeStr =
       startLN !== null && endLN !== null
-        ? `lines ${startLN}–${endLN}`
+        ? `lines ${startLN.lineNum}–${endLN.lineNum}`
         : `${sel.end - sel.start + 1} lines`
-    footerText.content = t`  ⬚ ${dim(`${rangeStr} selected`)}${sep}${hi("↵")} ${dim("annotate")}${sep}${hi("esc")} ${dim("cancel")}`
+    footerText.content = t`  ⬚ ${rangeStr} selected${sep}${hi("↵")} annotate${sep}${hi("esc")} cancel`
     footerText.fg = theme().headerFg
     return
   }
   if (focusedPanel === "tree") {
-    footerText.content = t`  ${hi("↑↓")} ${dim("files")}${sep}${hi("↵")} ${dim("open")}${sep}${hi("e")} ${dim("export → revu-review.md")}${sep}${hi("s")} ${dim("settings")}${sep}${hi("q")} ${dim("quit")}`
+    footerText.content = t`  ${hi("↑↓")} files${sep}${hi("↵")} open${sep}${hi("e")} export → revu-review.md${sep}${hi("s")} settings${sep}${hi("q")} quit`
   } else {
-    footerText.content = t`  ${hi("↑↓")} ${dim("move")}${sep}${hi("shift+↑↓")} ${dim("select")}${sep}${hi("↵")} ${dim("annotate")}${sep}${hi("e")} ${dim("export → revu-review.md")}${sep}${hi("q")} ${dim("quit")}`
+    footerText.content = t`  ${hi("↑↓")} move${sep}${hi("shift+↑↓")} select${sep}${hi("↵")} annotate${sep}${hi("e")} export → revu-review.md${sep}${hi("q")} quit`
   }
   footerText.fg = theme().mutedFg
 }
@@ -1369,25 +1407,22 @@ const updateCommentPreview = () => {
     commentPreviewBox.visible = false
     return
   }
-  const lineNum = diffLineToFileLineNum(cursorLine)
-  if (lineNum === null) {
+  const info = diffLineToFileLineNum(cursorLine)
+  if (info === null) {
     commentPreviewBox.visible = false
     return
   }
   const file = currentFileDiff().file
-  const key =
-    findCommentKeyForLine(file, lineNum) ??
-    (comments.has(commentKey(file, lineNum)) ? commentKey(file, lineNum) : null)
+  const key = findCommentKeyForLine(file, info.lineNum, info.side)
   const comment = key ? comments.get(key) : null
-  if (!comment) {
+  if (!comment || !key) {
     commentPreviewBox.visible = false
     return
   }
-  const parts = key!.split(":")
-  const lineRef = parts.slice(1).join(":")
-  const lineLabel = lineRef.includes("-")
-    ? `lines ${lineRef}`
-    : `line ${lineRef}`
+  const lineStr = key.split(":")[2]!
+  const lineLabel = lineStr.includes("-")
+    ? `lines ${lineStr}`
+    : `line ${lineStr}`
   const commentLines = comment.split("\n")
   const maxVisible = Math.max(4, Math.floor(renderer.terminalHeight * 0.3))
   previewScrollOffset = Math.max(
@@ -1472,26 +1507,36 @@ const applyCommentColorsForCurrentFile = () => {
   const file = currentFileDiff().file
   const lines = currentFileDiff().lines
   const sel = selectionRange()
-  let counter = 0
+  let newCounter = 0
+  let oldCounter = 0
   let contentIdx = 0
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i]!
     if (l.startsWith("@@ ")) {
-      const m = l.match(/@@ -\d+(?:,\d+)? \+(\d+)/)
-      counter = m ? parseInt(m[1]!, 10) : counter
+      const m = l.match(/@@ -(\d+)(?:,\d+)? \+(\d+)/)
+      if (m) {
+        oldCounter = parseInt(m[1]!, 10)
+        newCounter = parseInt(m[2]!, 10)
+      }
     } else if (isContentLine(l)) {
       const inSel = sel !== null && i >= sel.start && i <= sel.end
-      const lineNum = l.startsWith("-") ? null : counter
+      const isRemoved = l.startsWith("-")
+      const lineNum = isRemoved ? oldCounter : newCounter
+      const side = isRemoved ? "old" : "new"
       if (i === cursorLine) {
         diffRenderable.setLineColor(contentIdx, theme().cursorBg)
       } else if (inSel) {
         diffRenderable.setLineColor(contentIdx, theme().selectionBg)
-      } else if (lineNum !== null && isLineCommented(file, lineNum)) {
+      } else if (isLineCommented(file, lineNum, side)) {
         diffRenderable.setLineColor(contentIdx, theme().commentedBg)
       } else {
         diffRenderable.clearLineColor(contentIdx)
       }
-      if (!l.startsWith("-")) counter++
+      if (isRemoved) oldCounter++
+      else {
+        newCounter++
+        if (!l.startsWith("+")) oldCounter++
+      }
       contentIdx++
     }
   }
@@ -1587,21 +1632,34 @@ const getRangeContent = (
   fd: FileDiff,
   startLine: number,
   endLine: number,
+  side: "old" | "new" = "new",
 ): string => {
   const result: string[] = []
-  let counter = 0
+  let newCounter = 0
+  let oldCounter = 0
   for (const l of fd.lines) {
     if (l.startsWith("@@ ")) {
-      const m = l.match(/@@ -\d+(?:,\d+)? \+(\d+)/)
-      counter = m ? parseInt(m[1]!, 10) : counter
-    } else if (l.startsWith("+")) {
+      const m = l.match(/@@ -(\d+)(?:,\d+)? \+(\d+)/)
+      if (m) {
+        oldCounter = parseInt(m[1]!, 10)
+        newCounter = parseInt(m[2]!, 10)
+      }
+    } else if (l.startsWith("+") && side === "new") {
+      if (newCounter >= startLine && newCounter <= endLine)
+        result.push(l.slice(1))
+      if (newCounter > endLine) break
+      newCounter++
+    } else if (l.startsWith("-") && side === "old") {
+      if (oldCounter >= startLine && oldCounter <= endLine)
+        result.push(l.slice(1))
+      if (oldCounter > endLine) break
+      oldCounter++
+    } else if (!l.startsWith("+") && !l.startsWith("-") && l) {
+      const counter = side === "old" ? oldCounter : newCounter
       if (counter >= startLine && counter <= endLine) result.push(l.slice(1))
       if (counter > endLine) break
-      counter++
-    } else if (!l.startsWith("-") && l) {
-      if (counter >= startLine && counter <= endLine) result.push(l.slice(1))
-      if (counter > endLine) break
-      counter++
+      newCounter++
+      oldCounter++
     }
   }
   return result.join("\n")
@@ -1616,18 +1674,27 @@ const exportToMarkdown = async (prompt: string) => {
   }
   const byFile = new Map<
     string,
-    Array<{ startLine: number; endLine: number; comment: string }>
+    Array<{
+      startLine: number
+      endLine: number
+      side: "old" | "new"
+      comment: string
+    }>
   >()
   for (const [key, comment] of comments) {
     const colonIdx = key.indexOf(":")
     const file = key.slice(0, colonIdx)
     const rest = key.slice(colonIdx + 1)
-    const dash = rest.indexOf("-")
+    const sideEnd = rest.indexOf(":")
+    const side = rest.slice(0, sideEnd) as "old" | "new"
+    const lineStr = rest.slice(sideEnd + 1)
+    const dash = lineStr.indexOf("-")
     const startLine =
-      dash === -1 ? parseInt(rest, 10) : parseInt(rest.slice(0, dash), 10)
-    const endLine = dash === -1 ? startLine : parseInt(rest.slice(dash + 1), 10)
+      dash === -1 ? parseInt(lineStr, 10) : parseInt(lineStr.slice(0, dash), 10)
+    const endLine =
+      dash === -1 ? startLine : parseInt(lineStr.slice(dash + 1), 10)
     if (!byFile.has(file)) byFile.set(file, [])
-    byFile.get(file)!.push({ startLine, endLine, comment })
+    byFile.get(file)!.push({ startLine, endLine, side, comment })
   }
   const reviewSections = [
     `# Code Review\n\nGenerated by revu on ${new Date().toISOString()}\n`,
@@ -1636,15 +1703,16 @@ const exportToMarkdown = async (prompt: string) => {
     reviewSections.push(`## \`${file}\`\n`)
     const fd = fileDiffs.find((f) => f.file === file)
     const ext = file.split(".").pop()?.toLowerCase() ?? ""
-    for (const { startLine, endLine, comment } of entries.sort(
+    for (const { startLine, endLine, side, comment } of entries.sort(
       (a, b) => a.startLine - b.startLine,
     )) {
-      const content = fd ? getRangeContent(fd, startLine, endLine) : ""
+      const content = fd ? getRangeContent(fd, startLine, endLine, side) : ""
       const codeBlock = content ? `\`\`\`${ext}\n${content}\n\`\`\`\n` : ""
+      const sideLabel = side === "old" ? " (removed)" : ""
       const lineRef =
         startLine === endLine
-          ? `Line ${startLine}`
-          : `Lines ${startLine}–${endLine}`
+          ? `Line ${startLine}${sideLabel}`
+          : `Lines ${startLine}–${endLine}${sideLabel}`
       const commentText = comment
         .split("\n")
         .map((l) => `> ${l}`)
@@ -1665,27 +1733,30 @@ const openCommentInput = () => {
   const sel = selectionRange()
   const startDiffLine = sel ? sel.start : cursorLine
   const endDiffLine = sel ? sel.end : cursorLine
-  const startLineNum = diffLineToFileLineNum(startDiffLine)
-  if (startLineNum == null) {
-    footerText.content = `  ✗ Can't annotate this line (removed or header)`
+  const startInfo = diffLineToFileLineNum(startDiffLine)
+  if (startInfo == null) {
+    footerText.content = `  ✗ Can't annotate this line (header)`
     footerText.fg = theme().commentMark
     setTimeout(() => updateFooter(), 2000)
     return
   }
-  const endLineNum = diffLineToFileLineNum(endDiffLine) ?? startLineNum
-  commentTargetLine = startLineNum
-  commentTargetEndLine = endLineNum
+  const endInfo = diffLineToFileLineNum(endDiffLine) ?? startInfo
+  commentTargetLine = startInfo.lineNum
+  commentTargetEndLine = endInfo.lineNum
+  commentTargetSide = startInfo.side
   const isRange = commentTargetEndLine !== commentTargetLine
   const existing = comments.get(
     commentKey(
       currentFileDiff().file,
       commentTargetLine,
       isRange ? commentTargetEndLine : undefined,
+      commentTargetSide,
     ),
   )
+  const sideLabel = commentTargetSide === "old" ? " (removed)" : ""
   commentLabel.content = isRange
-    ? `  ✎ Lines ${commentTargetLine}–${commentTargetEndLine}:  `
-    : `  ✎ Line ${commentTargetLine}:  `
+    ? `  ✎ Lines ${commentTargetLine}–${commentTargetEndLine}${sideLabel}:  `
+    : `  ✎ Line ${commentTargetLine}${sideLabel}:  `
   commentInput.setText(existing ?? "")
   commentBarBox.visible = true
   commentInput.focus()
@@ -1708,6 +1779,7 @@ commentInput.onSubmit = () => {
     currentFileDiff().file,
     commentTargetLine,
     isRange ? commentTargetEndLine : undefined,
+    commentTargetSide,
   )
   if (value) {
     comments.set(key, value)
@@ -1854,9 +1926,13 @@ renderer.keyInput.on("keypress", (e: KeyEvent) => {
   } else if (e.name === "return" || e.name === "enter" || e.sequence === "\r") {
     openCommentInput()
   } else if (e.name === "d") {
-    const lineNum = diffLineToFileLineNum(cursorLine)
-    if (lineNum != null) {
-      const key = findCommentKeyForLine(currentFileDiff().file, lineNum)
+    const info = diffLineToFileLineNum(cursorLine)
+    if (info != null) {
+      const key = findCommentKeyForLine(
+        currentFileDiff().file,
+        info.lineNum,
+        info.side,
+      )
       if (key) {
         comments.delete(key)
         applyCommentColorsForCurrentFile()
