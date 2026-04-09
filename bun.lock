@@ -14,10 +14,9 @@
         "@types/bun": "latest",
       },
       "optionalDependencies": {
-        "@kud/revu-cli-darwin-arm64": "1.0.0",
-        "@kud/revu-cli-darwin-x64": "1.0.0",
-        "@kud/revu-cli-linux-arm64": "1.0.0",
-        "@kud/revu-cli-linux-x64": "1.0.0",
+        "@kud/revu-cli-darwin-arm64": "1.0.13",
+        "@kud/revu-cli-linux-arm64": "1.0.13",
+        "@kud/revu-cli-linux-x64": "1.0.13",
       },
       "peerDependencies": {
         "typescript": "^5",
@@ -82,6 +81,12 @@
     "@jimp/types": ["@jimp/types@1.6.0", "", { "dependencies": { "zod": "^3.23.8" } }, "sha512-7UfRsiKo5GZTAATxm2qQ7jqmUXP0DxTArztllTcYdyw6Xi5oT4RaoXynVtCD4UyLK5gJgkZJcwonoijrhYFKfg=="],
 
     "@jimp/utils": ["@jimp/utils@1.6.0", "", { "dependencies": { "@jimp/types": "1.6.0", "tinycolor2": "^1.6.0" } }, "sha512-gqFTGEosKbOkYF/WFj26jMHOI5OH2jeP1MmC/zbK6BF6VJBf8rIC5898dPfSzZEbSA0wbbV5slbntWVc5PKLFA=="],
+
+    "@kud/revu-cli-darwin-arm64": ["@kud/revu-cli-darwin-arm64@1.0.13", "", { "os": "darwin", "cpu": "arm64" }, "sha512-bkjCprD9RK0qyHDJNwCIOqxhrpEaKeOHVEbk+H+MT0zTjKtRJujzqzuT9aov2ze+kyQME1JXxwhWwcEyKSguEw=="],
+
+    "@kud/revu-cli-linux-arm64": ["@kud/revu-cli-linux-arm64@1.0.13", "", { "os": "linux", "cpu": "arm64" }, "sha512-uqKKbh+G9KZtYZBUn5vPKuoK8XwuguewOPW+phmcV8fwoFujKSY3d/mQlZ32x2EhS4x12XBo3tGx3I+VygmYnQ=="],
+
+    "@kud/revu-cli-linux-x64": ["@kud/revu-cli-linux-x64@1.0.13", "", { "os": "linux", "cpu": "x64" }, "sha512-tuTglMAFOgzFxoDZKO8aluJE7JvaZewKDyy7E1ggDKY/VpE0iHb4xbUI08VzbxZPE+1JRoSnfBLCzXJdrkqduw=="],
 
     "@opentui/core": ["@opentui/core@0.1.95", "", { "dependencies": { "bun-ffi-structs": "0.1.2", "diff": "8.0.2", "jimp": "1.6.0", "marked": "17.0.1", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@dimforge/rapier2d-simd-compat": "^0.17.3", "@opentui/core-darwin-arm64": "0.1.95", "@opentui/core-darwin-x64": "0.1.95", "@opentui/core-linux-arm64": "0.1.95", "@opentui/core-linux-x64": "0.1.95", "@opentui/core-win32-arm64": "0.1.95", "@opentui/core-win32-x64": "0.1.95", "bun-webgpu": "0.1.5", "planck": "^1.4.2", "three": "0.177.0" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-Ha73I+PPSy6Jk8CTZgdGRHU+nnmrPAs7m6w0k6ge1/kWbcNcZB0lY67sWQMdoa6bSINQMNWg7SjbNCC9B/0exg=="],
 
