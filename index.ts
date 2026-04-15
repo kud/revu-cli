@@ -13,6 +13,7 @@ import {
   t,
   fg,
   dim,
+  StyledText,
 } from "@opentui/core"
 
 const args = process.argv.slice(2)
@@ -896,16 +897,18 @@ const updateTreeHeader = () => {
       const s = (fd.status ?? "M") as keyof typeof counts
       if (s in counts) counts[s]++
     }
-    const parts: string[] = []
-    if (counts.M)
-      parts.push(`${fg(th.commentMark)(String(counts.M))}${dim("M")}`)
-    if (counts.A) parts.push(`${fg(th.successFg)(String(counts.A))}${dim("A")}`)
-    if (counts.D) parts.push(`${fg("#f07178")(String(counts.D))}${dim("D")}`)
-    if (counts.R)
-      parts.push(`${fg(th.treeActive)(String(counts.R))}${dim("R")}`)
+    const parts: ReturnType<typeof dim>[][] = []
+    if (counts.M) parts.push([fg(th.commentMark)(String(counts.M)), dim("M")])
+    if (counts.A) parts.push([fg(th.successFg)(String(counts.A)), dim("A")])
+    if (counts.D) parts.push([fg("#f07178")(String(counts.D)), dim("D")])
+    if (counts.R) parts.push([fg(th.treeActive)(String(counts.R)), dim("R")])
+    const sep = t`  `.chunks
     treeHeaderText.content =
       parts.length > 0
-        ? t`  ${dim("Files")}  ${parts.join("  ")}`
+        ? new StyledText([
+            ...t`  ${dim("Files")}  `.chunks,
+            ...parts.flatMap((p, i) => (i > 0 ? [...sep, ...p] : p)),
+          ])
         : t`  ${dim("Files")}`
   } else {
     treeHeaderText.content = t`  ${dim("Files")}  ${fg(th.treeActive)(String(fileDiffs.length))}`

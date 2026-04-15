@@ -28,14 +28,15 @@ if (!pkg) {
   process.exit(1)
 }
 
+const localBin = join(dirname(fileURLToPath(import.meta.url)), "../revu-bin")
+
 let binaryPath
-try {
-  binaryPath = require.resolve(`${pkg}/revu-bin`)
-} catch {
-  const localBin = join(dirname(fileURLToPath(import.meta.url)), "../revu-bin")
-  if (existsSync(localBin)) {
-    binaryPath = localBin
-  } else {
+if (existsSync(localBin)) {
+  binaryPath = localBin
+} else {
+  try {
+    binaryPath = require.resolve(`${pkg}/revu-bin`)
+  } catch {
     console.error(
       `revu-cli: could not find binary for ${platform}. Try reinstalling revu-cli.`,
     )
