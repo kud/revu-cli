@@ -1,0 +1,50 @@
+---
+title: Introduction
+description: An interactive terminal diff reviewer — annotate diffs line by line and export your review to Markdown.
+---
+
+**revu** is an interactive terminal diff reviewer. Walk through your changes hunk
+by hunk, annotate individual lines or ranges, and export the whole review to a
+clean Markdown file ready for a human teammate or an AI assistant.
+
+It reads the same `.revu.json` annotation format as the revu VSCode extension,
+so reviews stay in sync whether you work in the terminal or the editor.
+
+## Features
+
+- **Line and range annotations** — comment on a single line or select a range and
+  annotate the whole block.
+- **Hunk and file navigation** — jump between hunks, annotations, and files
+  without leaving the keyboard.
+- **PR mode** — review every commit between a branch and `HEAD` with
+  `--against`.
+- **Markdown export** — export annotations to `revu-review.md`, with an optional
+  AI context header, by pressing `e`.
+- **Persistent reviews** — annotations autosave to `.revu.json` and survive
+  across sessions.
+- **Themeable** — switch theme and view mode from an in-app settings panel,
+  saved to your user config.
+
+## Install
+
+```sh
+npm install -g @kud/revu-cli
+```
+
+## Usage
+
+```sh
+# Review staged/unstaged changes in the current repo
+revu
+
+# Review a specific file
+revu src/foo.ts
+
+# Review all commits between a branch and HEAD (PR mode)
+revu --against main
+```
+
+Inside the reviewer, move with `↑↓` / `j k`, press `↵` to annotate, and `e` to
+export. See [Usage](/projects/revu-cli/docs/usage) for the full walkthrough and
+[Keybindings](/projects/revu-cli/docs/keybindings) for the complete key
+reference.
