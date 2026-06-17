@@ -1,12 +1,12 @@
 ---
-title: Usage
+title: ⚡ Usage
 description: Review changes, annotate lines, navigate hunks, and export your review to Markdown.
 ---
 
 revu opens an interactive reviewer over your changes. Run it inside any git
 repository.
 
-## Reviewing changes
+## 🔍 Reviewing changes
 
 ```sh
 # Review staged/unstaged changes in the current repo
@@ -24,7 +24,7 @@ Pass a path to scope the review to a single file, or `--against <branch>` to
 review every commit between that branch and `HEAD` — the typical pull-request
 workflow.
 
-## Annotating
+## 📝 Annotating
 
 Move the cursor with `↑↓` or `j k`. Press `↵` to attach a note to the current
 line. To annotate a block, hold `shift` while moving to select a range, then
@@ -33,14 +33,14 @@ press `↵`. Press `d` to delete the annotation under the cursor.
 Annotations autosave to `.revu.json` in the repo root, so you can quit and pick
 the review back up later.
 
-## Navigating
+## 🧭 Navigating
 
 revu keeps you on the keyboard. Jump between hunks with `] [`, between your own
 annotations with `c C`, and between files with `n p`. Press `←` to return to the
 file tree. The full list lives in
 [Keybindings](/projects/revu-cli/docs/keybindings).
 
-## Exporting
+## 📤 Exporting
 
 Press `e` to export every annotation to `revu-review.md`. revu prompts for an
 optional AI context header — a short note that frames the review for an AI
@@ -48,7 +48,7 @@ assistant — and then writes a clean Markdown document suitable for sharing wit
 teammate or pasting into a chat. The file is safe to delete once you are done
 with it.
 
-## Settings
+## 🔧 Settings
 
 Press `s` to open the in-app settings panel and change the theme or view mode.
 Changes are saved automatically to your user config — see
