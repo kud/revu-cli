@@ -11,14 +11,6 @@
 
 </div>
 
-<div align="center">
-
-<a href="https://asciinema.org/a/SitNPy6fQpidFCcH">
-  <img src="assets/demo.gif" alt="revu demo" />
-</a>
-
-</div>
-
 ## Features
 
 - **Line and range annotations** — comment on a single line or select a range and annotate the whole block.
@@ -27,6 +19,14 @@
 - **Markdown export** — export annotations to `revu-review.md`, with an optional AI context header, by pressing `e`.
 - **Persistent reviews** — annotations autosave to `.revu.json` and survive across sessions.
 - **Themeable** — switch theme and view mode from an in-app settings panel, saved to your user config.
+
+<div align="center">
+
+<a href="https://asciinema.org/a/SitNPy6fQpidFCcH">
+  <img src="assets/demo.gif" alt="revu demo" />
+</a>
+
+</div>
 
 ## Install
 
