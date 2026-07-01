@@ -24,6 +24,26 @@ Pass a path to scope the review to a single file, or `--against <branch>` to
 review every commit between that branch and `HEAD` — the typical pull-request
 workflow.
 
+### Watch mode
+
+revu keeps the diff **live by default**: it re-runs the diff whenever the working
+tree changes (debounced), so as you (or an agent) edit files, the review updates
+without quitting. Your annotations are kept across reloads — if an annotated line
+no longer exists in the refreshed diff, it is flagged as `⚠ N stale` in the
+header rather than dropped.
+
+```sh
+# Live reload is on by default
+revu
+
+# Turn it off for a static, one-shot review
+revu --no-watch
+```
+
+Pass `--no-watch` to disable it — handy for a quick annotate-and-export pass, or
+on very large repos where a recursive file watch is costly. (Adding or removing
+whole files mid-watch may need a restart to refresh the file tree.)
+
 ## 📝 Annotating
 
 Move the cursor with `↑↓` or `j k`. Press `↵` to attach a note to the current
@@ -32,6 +52,15 @@ press `↵`. Press `d` to delete the annotation under the cursor.
 
 Annotations autosave to `.revu.json` in the repo root, so you can quit and pick
 the review back up later.
+
+## 🏷️ Triaging
+
+Each annotation can carry a **severity** and a **status**. With the cursor on an
+annotated line, press `v` to cycle the severity (blocker → concern → nitpick →
+none) and `t` to cycle the status (open → accepted → dismissed → resolved). The
+current severity and status show as a coloured badge in the annotation preview,
+and both surface in the export — severity as a conventional-comment prefix
+(`**blocker:**`) and status as a label on non-default states.
 
 ## 🧭 Navigating
 
@@ -47,6 +76,87 @@ optional AI context header — a short note that frames the review for an AI
 assistant — and then writes a clean Markdown document suitable for sharing with a
 teammate or pasting into a chat. The file is safe to delete once you are done
 with it.
+
+### Headless export
+
+For CI or agent pipelines, export without opening the TUI:
+
+```sh
+# Markdown (default) → revu-review.md
+revu --export
+
+# Machine-readable JSON → revu-review.json
+revu --export --format json
+
+# Custom destination
+revu --export --format json --out review.json
+
+# Stream to stdout (no file) — ideal for piping to an agent
+revu --export --format json --out -
+```
+
+Headless export reads the annotations from `.revu.json`, so run it after a
+review session. The JSON form emits one entry per annotation with its file,
+line range, side, severity, status, source, text, and the captured code range —
+ready to feed back to an agent. It works in `--against` mode too. Pass `--out -`
+to write to stdout instead of a file (the status line then goes to stderr, so
+stdout stays pure JSON).
+
+## 🧑‍💻 Reviewing side-by-side with an AI agent
+
+revu pairs naturally with an AI coding agent (like Claude Code) in a split
+terminal — agent on the left, revu on the right:
+
+1. The agent writes code on the left; with live reload on (the default), the
+   diff on the right updates as it works.
+2. You annotate lines in revu as you read — each note autosaves to `.revu.json`
+   instantly.
+3. When you're ready, tell the agent something like _"address my revu
+   annotations"_. It grabs them with:
+
+   ```sh
+   revu --export --format json --out -
+   ```
+
+   which streams every annotation — with its code range, severity, and status —
+   for the agent to act on. The agent can also seed its own findings back with
+   `revu --import` (see below), closing the loop in both directions.
+
+No server, no protocol — the shared `.revu.json` file is the whole channel.
+
+## 🔀 Pushing to a GitHub PR
+
+When you review against a branch (`--against`), you can post your annotations
+straight onto the branch's pull request as inline review comments:
+
+```sh
+# Preview the payload — no network mutation
+revu --against main --push-pr --dry-run
+
+# Post the comments to the PR
+revu --against main --push-pr
+```
+
+revu detects the PR for the current branch with the `gh` CLI (which must be
+installed and authenticated), maps each annotation to a file + line + side, and
+posts them as a single pending review. Severity and status ride along in each
+comment body. revu stays local-first: it makes **no network calls** unless you
+pass `--push-pr`.
+
+## 🤖 Importing an agent review
+
+An AI agent can produce a review that you then triage by hand. Feed its findings
+in with `--import`:
+
+```sh
+revu --import agent-review.json
+```
+
+The file uses the same schema revu writes (`{ prompt?, comments: [...] }`).
+Imported annotations are tagged `source: agent` so they are distinguishable, and
+they never overwrite notes you already have on the same line. revu merges them
+into `.revu.json`, then opens the TUI so you can accept, dismiss, edit, and
+export as usual — closing the loop from an agent's review back to a human's.
 
 ## 🔧 Settings
 
