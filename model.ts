@@ -165,6 +165,43 @@ export const loadComments = async (
   }
 }
 
+// Loads an external review file (same `.revu.json` schema) into the map for
+// triage. Imported items are tagged `source: "agent"` unless they name their
+// own source, and existing annotations are never clobbered (a human note on a
+// line wins over an imported one). Returns the file's prompt and how many new
+// annotations were added.
+export const importAnnotations = async (
+  path: string,
+  comments: Map<string, Annotation>,
+): Promise<{ prompt: string | null; added: number }> => {
+  const file = Bun.file(path)
+  if (!(await file.exists())) {
+    throw new Error(`Import file not found: ${path}`)
+  }
+  const data = (await file.json()) as {
+    prompt?: string
+    comments: SavedComment[]
+  }
+  let added = 0
+  for (const c of data.comments ?? []) {
+    const key = commentKey(
+      c.file,
+      c.startLine,
+      c.endLine !== c.startLine ? c.endLine : undefined,
+      c.side ?? "new",
+    )
+    if (comments.has(key)) continue
+    comments.set(key, {
+      text: c.text,
+      severity: c.severity,
+      status: c.status,
+      source: c.source ?? "agent",
+    })
+    added++
+  }
+  return { prompt: data.prompt ?? null, added }
+}
+
 // Serialises annotations. Triage fields are written only when they carry
 // non-default information, so a review with no triage produces a file
 // identical to the pre-triage schema (keeps the revu-vscode contract intact).

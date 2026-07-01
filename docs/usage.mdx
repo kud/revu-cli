@@ -77,6 +77,21 @@ review session. The JSON form emits one entry per annotation with its file,
 line range, side, severity, status, source, text, and the captured code range —
 ready to feed back to an agent. It works in `--against` mode too.
 
+## 🤖 Importing an agent review
+
+An AI agent can produce a review that you then triage by hand. Feed its findings
+in with `--import`:
+
+```sh
+revu --import agent-review.json
+```
+
+The file uses the same schema revu writes (`{ prompt?, comments: [...] }`).
+Imported annotations are tagged `source: agent` so they are distinguishable, and
+they never overwrite notes you already have on the same line. revu merges them
+into `.revu.json`, then opens the TUI so you can accept, dismiss, edit, and
+export as usual — closing the loop from an agent's review back to a human's.
+
 ## 🔧 Settings
 
 Press `s` to open the in-app settings panel and change the theme or view mode.

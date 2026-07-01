@@ -7,6 +7,8 @@ import { parseArgs, HELP } from "./cli.ts"
 import { gatherDiff } from "./git.ts"
 import {
   loadComments,
+  importAnnotations,
+  saveComments,
   DEFAULT_EXPORT_PROMPT,
   type Annotation,
 } from "./model.ts"
@@ -14,9 +16,8 @@ import { buildReviewMarkdown, buildReviewJson } from "./export.ts"
 import { loadSettings } from "./ui/settings.ts"
 import { runApp } from "./ui/app.ts"
 
-const { help, againstBranch, rawTarget, exportMode, format, out } = parseArgs(
-  process.argv.slice(2),
-)
+const { help, againstBranch, rawTarget, exportMode, format, out, importPath } =
+  parseArgs(process.argv.slice(2))
 
 if (help) {
   console.log(HELP)
@@ -35,7 +36,22 @@ const EXPORT_PATH = `${diff.targetDir}/revu-review.md`
 
 const comments = new Map<string, Annotation>()
 const { prompt } = await loadComments(AUTOSAVE_PATH, comments)
-const savedPrompt = prompt ?? DEFAULT_EXPORT_PROMPT
+let savedPrompt = prompt ?? DEFAULT_EXPORT_PROMPT
+
+// Import an external agent review, merge it into the map, and persist so the
+// triaged result is picked up on the next launch.
+if (importPath) {
+  const { prompt: importedPrompt, added } = await importAnnotations(
+    importPath,
+    comments,
+  ).catch((e: unknown) => {
+    console.error(e instanceof Error ? e.message : String(e))
+    process.exit(1)
+  })
+  if (importedPrompt && prompt == null) savedPrompt = importedPrompt
+  await saveComments(AUTOSAVE_PATH, comments, savedPrompt)
+  console.log(`Imported ${added} annotation(s) from ${importPath}`)
+}
 
 // Headless export — build the artifact from .revu.json and exit without a TUI.
 if (exportMode) {
