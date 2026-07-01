@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ---
 
+## 1.1.1 — 2026-07-01
+
+### Fixed
+
+- `npm install -g @kud/revu-cli` failed with `EBADPLATFORM` on macOS (and any platform other than Linux) because the `@opentui/core` platform-native packages were declared as hard `dependencies` — npm treats a mismatched `os` on a required dependency as fatal. They are now `optionalDependencies`, so npm installs only the native matching your platform. ([50ec3c0](https://github.com/kud/revu-cli/commit/50ec3c0))
+
+---
+
 ## 1.1.0 — 2026-07-01
 
 revu grows from a single-file interactive diff reviewer into a modular tool with a full AI-agent round-trip: triage severity, headless export, agent import, and pushing review comments straight to a GitHub PR.

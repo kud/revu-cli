@@ -1,6 +1,6 @@
 {
   "name": "@kud/revu-cli",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Interactive terminal diff reviewer",
   "module": "index.ts",
   "type": "module",
@@ -23,9 +23,9 @@
     "bump:major": "bun scripts/bump.ts major"
   },
   "optionalDependencies": {
-    "@kud/revu-cli-darwin-arm64": "1.1.0",
-    "@kud/revu-cli-linux-x64": "1.1.0",
-    "@kud/revu-cli-linux-arm64": "1.1.0",
+    "@kud/revu-cli-darwin-arm64": "1.1.1",
+    "@kud/revu-cli-linux-x64": "1.1.1",
+    "@kud/revu-cli-linux-arm64": "1.1.1",
     "@opentui/core-darwin-arm64": "0.1.96",
     "@opentui/core-linux-arm64": "0.1.96",
     "@opentui/core-linux-x64": "0.1.96"
