@@ -3,7 +3,13 @@
 // file and reports status).
 
 import { type FileDiff } from "./git.ts"
-import { type Annotation, parseCommentKey } from "./model.ts"
+import {
+  type Annotation,
+  type Severity,
+  type Status,
+  type Source,
+  parseCommentKey,
+} from "./model.ts"
 
 export const getRangeContent = (
   fd: FileDiff,
@@ -14,6 +20,7 @@ export const getRangeContent = (
   const result: string[] = []
   let newCounter = 0
   let oldCounter = 0
+  let inHunk = false
   for (const l of fd.lines) {
     if (l.startsWith("@@ ")) {
       const m = l.match(/@@ -(\d+)(?:,\d+)? \+(\d+)/)
@@ -21,6 +28,11 @@ export const getRangeContent = (
         oldCounter = parseInt(m[1]!, 10)
         newCounter = parseInt(m[2]!, 10)
       }
+      inHunk = true
+    } else if (!inHunk) {
+      // Skip the file header (diff --git, index, --- a/, +++ b/) that precedes
+      // the first hunk — otherwise its lines are miscounted as content.
+      continue
     } else if (l.startsWith("+") && side === "new") {
       if (newCounter >= startLine && newCounter <= endLine)
         result.push(l.slice(1))
@@ -93,4 +105,48 @@ export const buildReviewMarkdown = (
   }
   const header = prompt.trim() ? `${prompt.trim()}\n\n---\n\n` : ""
   return header + reviewSections.join("\n")
+}
+
+// Machine-readable review for agents/tooling: one entry per annotation with
+// resolved triage fields and the captured code range.
+export interface JsonReviewComment {
+  file: string
+  startLine: number
+  endLine: number
+  side: "old" | "new"
+  severity: Severity | null
+  status: Status
+  source: Source
+  text: string
+  code: string
+}
+
+export interface JsonReview {
+  prompt: string
+  comments: JsonReviewComment[]
+}
+
+export const buildReviewJson = (
+  comments: Map<string, Annotation>,
+  fileDiffs: FileDiff[],
+  prompt: string,
+): JsonReview => {
+  const out: JsonReviewComment[] = []
+  for (const [key, ann] of comments) {
+    const { file, side, startLine, endLine } = parseCommentKey(key)
+    const fd = fileDiffs.find((f) => f.file === file)
+    out.push({
+      file,
+      startLine,
+      endLine,
+      side,
+      severity: ann.severity ?? null,
+      status: ann.status ?? "open",
+      source: ann.source ?? "human",
+      text: ann.text,
+      code: fd ? getRangeContent(fd, startLine, endLine, side) : "",
+    })
+  }
+  out.sort((a, b) => a.file.localeCompare(b.file) || a.startLine - b.startLine)
+  return { prompt, comments: out }
 }

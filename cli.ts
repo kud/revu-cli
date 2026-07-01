@@ -6,9 +6,13 @@ export const HELP = `revu — interactive diff reviewer
 Usage:
   revu [path]                   Review staged/unstaged changes in [path] (default: cwd)
   revu --against <branch>       Review all commits between <branch> and HEAD
+  revu --export                 Build the review from .revu.json without the TUI
 
 Options:
   -h, --help                    Show this help
+  --export                      Headless export — no TUI (for CI / agents)
+  --format <md|json>            Export format (default: md)
+  --out <path>                  Export destination (default: revu-review.md / .json)
 
 Keys:
   ↑↓ / j k                     Move cursor
@@ -34,19 +38,32 @@ export interface ParsedArgs {
   help: boolean
   againstBranch: string | null
   rawTarget: string
+  exportMode: boolean
+  format: "md" | "json"
+  out: string | null
 }
 
 export const parseArgs = (argv: string[]): ParsedArgs => {
   const help = argv.includes("--help") || argv.includes("-h")
   let againstBranch: string | null = null
+  let exportMode = false
+  let format: "md" | "json" = "md"
+  let out: string | null = null
   const positionalArgs: string[] = []
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--against" && argv[i + 1]) {
+    const a = argv[i]!
+    if (a === "--against" && argv[i + 1]) {
       againstBranch = argv[++i]!
+    } else if (a === "--export") {
+      exportMode = true
+    } else if (a === "--format" && argv[i + 1]) {
+      format = argv[++i] === "json" ? "json" : "md"
+    } else if (a === "--out" && argv[i + 1]) {
+      out = argv[++i]!
     } else {
-      positionalArgs.push(argv[i]!)
+      positionalArgs.push(a)
     }
   }
   const rawTarget = positionalArgs[0] ?? process.cwd()
-  return { help, againstBranch, rawTarget }
+  return { help, againstBranch, rawTarget, exportMode, format, out }
 }
