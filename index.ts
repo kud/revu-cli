@@ -13,15 +13,30 @@ import {
   type Annotation,
 } from "./model.ts"
 import { buildReviewMarkdown, buildReviewJson } from "./export.ts"
+import { pushReviewToPr } from "./github.ts"
 import { loadSettings } from "./ui/settings.ts"
 import { runApp } from "./ui/app.ts"
 
-const { help, againstBranch, rawTarget, exportMode, format, out, importPath } =
-  parseArgs(process.argv.slice(2))
+const {
+  help,
+  againstBranch,
+  rawTarget,
+  exportMode,
+  format,
+  out,
+  importPath,
+  pushPr,
+  dryRun,
+} = parseArgs(process.argv.slice(2))
 
 if (help) {
   console.log(HELP)
   process.exit(0)
+}
+
+if (pushPr && againstBranch == null) {
+  console.error("--push-pr requires --against <branch>.")
+  process.exit(1)
 }
 
 const diff = await gatherDiff({ rawTarget, againstBranch }).catch(
@@ -51,6 +66,22 @@ if (importPath) {
   if (importedPrompt && prompt == null) savedPrompt = importedPrompt
   await saveComments(AUTOSAVE_PATH, comments, savedPrompt)
   console.log(`Imported ${added} annotation(s) from ${importPath}`)
+}
+
+// Push the review to the current branch's GitHub PR. Opt-in and PR-mode only;
+// this is the sole path that touches the network.
+if (pushPr) {
+  if (comments.size === 0) {
+    console.error("No annotations to push.")
+    process.exit(1)
+  }
+  await pushReviewToPr({ cwd: diff.targetDir, comments, dryRun }).catch(
+    (e: unknown) => {
+      console.error(e instanceof Error ? e.message : String(e))
+      process.exit(1)
+    },
+  )
+  process.exit(0)
 }
 
 // Headless export — build the artifact from .revu.json and exit without a TUI.

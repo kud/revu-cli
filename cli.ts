@@ -8,6 +8,8 @@ Usage:
   revu --against <branch>       Review all commits between <branch> and HEAD
   revu --import <file.json>     Seed annotations from an agent review, then triage
   revu --export                 Build the review from .revu.json without the TUI
+  revu --against <branch> --push-pr
+                                Post annotations as inline comments on the branch's PR
 
 Options:
   -h, --help                    Show this help
@@ -15,6 +17,9 @@ Options:
   --export                      Headless export — no TUI (for CI / agents)
   --format <md|json>            Export format (default: md)
   --out <path>                  Export destination (default: revu-review.md / .json)
+  --push-pr                     Post annotations to the current branch's GitHub PR
+                                (requires --against; no network without this flag)
+  --dry-run                     With --push-pr, preview the payload without posting
 
 Keys:
   ↑↓ / j k                     Move cursor
@@ -44,10 +49,14 @@ export interface ParsedArgs {
   format: "md" | "json"
   out: string | null
   importPath: string | null
+  pushPr: boolean
+  dryRun: boolean
 }
 
 export const parseArgs = (argv: string[]): ParsedArgs => {
   const help = argv.includes("--help") || argv.includes("-h")
+  const pushPr = argv.includes("--push-pr")
+  const dryRun = argv.includes("--dry-run")
   let againstBranch: string | null = null
   let exportMode = false
   let format: "md" | "json" = "md"
@@ -66,10 +75,22 @@ export const parseArgs = (argv: string[]): ParsedArgs => {
       out = argv[++i]!
     } else if (a === "--import" && argv[i + 1]) {
       importPath = argv[++i]!
+    } else if (a === "--push-pr" || a === "--dry-run") {
+      // Boolean flags handled above via argv.includes.
     } else {
       positionalArgs.push(a)
     }
   }
   const rawTarget = positionalArgs[0] ?? process.cwd()
-  return { help, againstBranch, rawTarget, exportMode, format, out, importPath }
+  return {
+    help,
+    againstBranch,
+    rawTarget,
+    exportMode,
+    format,
+    out,
+    importPath,
+    pushPr,
+    dryRun,
+  }
 }

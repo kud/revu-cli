@@ -77,6 +77,25 @@ review session. The JSON form emits one entry per annotation with its file,
 line range, side, severity, status, source, text, and the captured code range —
 ready to feed back to an agent. It works in `--against` mode too.
 
+## 🔀 Pushing to a GitHub PR
+
+When you review against a branch (`--against`), you can post your annotations
+straight onto the branch's pull request as inline review comments:
+
+```sh
+# Preview the payload — no network mutation
+revu --against main --push-pr --dry-run
+
+# Post the comments to the PR
+revu --against main --push-pr
+```
+
+revu detects the PR for the current branch with the `gh` CLI (which must be
+installed and authenticated), maps each annotation to a file + line + side, and
+posts them as a single pending review. Severity and status ride along in each
+comment body. revu stays local-first: it makes **no network calls** unless you
+pass `--push-pr`.
+
 ## 🤖 Importing an agent review
 
 An AI agent can produce a review that you then triage by hand. Feed its findings
