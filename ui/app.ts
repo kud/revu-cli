@@ -31,7 +31,11 @@ import {
   diffLineToFileLineNum as diffLineToFileLineNumIn,
 } from "../git.ts"
 import {
+  type Annotation,
+  type Severity,
   commentKey,
+  cycleSeverity,
+  cycleStatus,
   isLineCommented as isLineCommentedIn,
   findCommentKeyForLine as findCommentKeyForLineIn,
   saveComments as saveCommentsFile,
@@ -48,7 +52,7 @@ export interface AppContext {
   currentBranch: string | null
   againstBranch: string | null
   commitList: string[]
-  comments: Map<string, string>
+  comments: Map<string, Annotation>
   savedPrompt: string
   themeIndex: number
   diffView: "unified" | "split"
@@ -630,6 +634,13 @@ export const runApp = async (ctx: AppContext) => {
     footerText.fg = theme().mutedFg
   }
 
+  const severityColor = (s: Severity): string =>
+    s === "blocker"
+      ? "#f07178"
+      : s === "concern"
+        ? theme().commentMark
+        : theme().mutedFg
+
   const updateCommentPreview = () => {
     if (mode !== "normal" || focusedPanel !== "diff") {
       commentPreviewBox.visible = false
@@ -642,8 +653,8 @@ export const runApp = async (ctx: AppContext) => {
     }
     const file = currentFileDiff().file
     const key = findCommentKeyForLine(file, info.lineNum, info.side)
-    const comment = key ? comments.get(key) : null
-    if (!comment || !key) {
+    const ann = key ? comments.get(key) : null
+    if (!ann || !key) {
       commentPreviewBox.visible = false
       return
     }
@@ -651,7 +662,7 @@ export const runApp = async (ctx: AppContext) => {
     const lineLabel = lineStr.includes("-")
       ? `lines ${lineStr}`
       : `line ${lineStr}`
-    const commentLines = comment.split("\n")
+    const commentLines = ann.text.split("\n")
     const maxVisible = Math.max(4, Math.floor(renderer.terminalHeight * 0.3))
     previewScrollOffset = Math.max(
       0,
@@ -670,7 +681,12 @@ export const runApp = async (ctx: AppContext) => {
       canScrollUp || canScrollDown
         ? t`  ${dim(`${canScrollUp ? "{ up" : ""}${canScrollUp && canScrollDown ? "  " : ""}${canScrollDown ? "} down" : ""}`)}`
         : ""
-    commentPreviewLabel.content = t`  ${fg(theme().commentMark)("▌")} ${fg(theme().commentMark)(lineLabel)}  ${dim("↵ edit  d delete")}${scrollHint}`
+    const sevBadge = ann.severity
+      ? fg(severityColor(ann.severity))(` [${ann.severity}]`)
+      : ""
+    const statusBadge =
+      ann.status && ann.status !== "open" ? dim(` · ${ann.status}`) : ""
+    commentPreviewLabel.content = t`  ${fg(theme().commentMark)("▌")} ${fg(theme().commentMark)(lineLabel)}${sevBadge}${statusBadge}  ${dim("↵ edit  v sev  t status  d delete")}${scrollHint}`
     commentPreviewContent.content = visibleLines
       .map((l) => `  ▌  ${l}`)
       .join("\n")
@@ -900,7 +916,7 @@ export const runApp = async (ctx: AppContext) => {
     commentLabel.content = isRange
       ? `  ✎ Lines ${commentTargetLine}–${commentTargetEndLine}${sideLabel}:  `
       : `  ✎ Line ${commentTargetLine}${sideLabel}:  `
-    commentInput.setText(existing ?? "")
+    commentInput.setText(existing?.text ?? "")
     commentBarBox.visible = true
     commentInput.focus()
     mode = "comment"
@@ -925,7 +941,12 @@ export const runApp = async (ctx: AppContext) => {
       commentTargetSide,
     )
     if (value) {
-      comments.set(key, value)
+      const prev = comments.get(key)
+      comments.set(key, {
+        ...prev,
+        text: value,
+        source: prev?.source ?? "human",
+      })
     } else {
       comments.delete(key)
     }
@@ -934,6 +955,26 @@ export const runApp = async (ctx: AppContext) => {
     applyCommentColorsForCurrentFile()
     updateFileTree()
     updateHeader()
+    saveComments()
+  }
+
+  // Cycle a triage field on the annotation under the cursor, if any.
+  const cycleAnnotation = (field: "severity" | "status") => {
+    const info = diffLineToFileLineNum(cursorLine)
+    if (info == null) return
+    const key = findCommentKeyForLine(
+      currentFileDiff().file,
+      info.lineNum,
+      info.side,
+    )
+    if (!key) return
+    const ann = comments.get(key)
+    if (!ann) return
+    if (field === "severity") ann.severity = cycleSeverity(ann.severity)
+    else ann.status = cycleStatus(ann.status)
+    comments.set(key, ann)
+    updateCommentPreview()
+    updateFileTree()
     saveComments()
   }
 
@@ -1088,6 +1129,10 @@ export const runApp = async (ctx: AppContext) => {
           saveComments()
         }
       }
+    } else if (e.name === "v") {
+      cycleAnnotation("severity")
+    } else if (e.name === "t") {
+      cycleAnnotation("status")
     } else if (e.name === "}") {
       previewScrollOffset++
       updateCommentPreview()

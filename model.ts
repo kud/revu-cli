@@ -7,12 +7,47 @@ export const DEFAULT_EXPORT_PROMPT =
   "Each annotation is an issue, question, or required change. " +
   "Implement all changes."
 
+export type Severity = "blocker" | "concern" | "nitpick"
+export type Status = "open" | "accepted" | "dismissed" | "resolved"
+export type Source = "human" | "agent"
+
+// In-memory annotation: the comment text plus optional triage metadata. The
+// comments map is keyed by `commentKey` and holds these.
+export interface Annotation {
+  text: string
+  severity?: Severity
+  status?: Status
+  source?: Source
+}
+
+// Serialised shape in `.revu.json`. All triage fields are optional so files
+// written by older revu (or revu-vscode) load unchanged.
 export interface SavedComment {
   file: string
   startLine: number
   endLine: number
   text: string
   side?: "old" | "new"
+  severity?: Severity
+  status?: Status
+  source?: Source
+}
+
+export const SEVERITIES: Severity[] = ["blocker", "concern", "nitpick"]
+export const STATUSES: Status[] = ["open", "accepted", "dismissed", "resolved"]
+
+// Cycle severity none → blocker → concern → nitpick → none.
+export const cycleSeverity = (
+  s: Severity | undefined,
+): Severity | undefined => {
+  const i = s ? SEVERITIES.indexOf(s) : -1
+  return i + 1 >= SEVERITIES.length ? undefined : SEVERITIES[i + 1]
+}
+
+// Cycle status open → accepted → dismissed → resolved → open.
+export const cycleStatus = (s: Status | undefined): Status => {
+  const i = STATUSES.indexOf(s ?? "open")
+  return STATUSES[(i + 1) % STATUSES.length]!
 }
 
 // Comments are keyed "file:side:N" for a single line, "file:side:N-M" for a
@@ -53,7 +88,7 @@ export const parseCommentKey = (
 }
 
 export const isLineCommented = (
-  comments: Map<string, string>,
+  comments: Map<string, Annotation>,
   file: string,
   lineNum: number,
   side: "old" | "new" = "new",
@@ -75,7 +110,7 @@ export const isLineCommented = (
 }
 
 export const findCommentKeyForLine = (
-  comments: Map<string, string>,
+  comments: Map<string, Annotation>,
   file: string,
   lineNum: number,
   side: "old" | "new" = "new",
@@ -101,7 +136,7 @@ export const findCommentKeyForLine = (
 // back to the default).
 export const loadComments = async (
   path: string,
-  comments: Map<string, string>,
+  comments: Map<string, Annotation>,
 ): Promise<{ prompt: string | null }> => {
   try {
     const file = Bun.file(path)
@@ -117,7 +152,12 @@ export const loadComments = async (
         c.endLine !== c.startLine ? c.endLine : undefined,
         c.side ?? "new",
       )
-      comments.set(key, c.text)
+      comments.set(key, {
+        text: c.text,
+        severity: c.severity,
+        status: c.status,
+        source: c.source,
+      })
     }
     return { prompt: data.prompt ?? null }
   } catch {
@@ -125,15 +165,28 @@ export const loadComments = async (
   }
 }
 
+// Serialises annotations. Triage fields are written only when they carry
+// non-default information, so a review with no triage produces a file
+// identical to the pre-triage schema (keeps the revu-vscode contract intact).
 export const saveComments = async (
   path: string,
-  comments: Map<string, string>,
+  comments: Map<string, Annotation>,
   prompt: string,
 ): Promise<void> => {
   const saved: SavedComment[] = []
-  for (const [key, text] of comments) {
+  for (const [key, ann] of comments) {
     const { file, side, startLine, endLine } = parseCommentKey(key)
-    saved.push({ file, startLine, endLine, text, side })
+    const entry: SavedComment = {
+      file,
+      startLine,
+      endLine,
+      text: ann.text,
+      side,
+    }
+    if (ann.severity) entry.severity = ann.severity
+    if (ann.status && ann.status !== "open") entry.status = ann.status
+    if (ann.source && ann.source !== "human") entry.source = ann.source
+    saved.push(entry)
   }
   await Bun.write(
     path,

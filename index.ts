@@ -5,7 +5,11 @@
 
 import { parseArgs, HELP } from "./cli.ts"
 import { gatherDiff } from "./git.ts"
-import { loadComments, DEFAULT_EXPORT_PROMPT } from "./model.ts"
+import {
+  loadComments,
+  DEFAULT_EXPORT_PROMPT,
+  type Annotation,
+} from "./model.ts"
 import { loadSettings } from "./ui/settings.ts"
 import { runApp } from "./ui/app.ts"
 
@@ -28,7 +32,7 @@ const { themeIndex, diffView } = loadSettings()
 const AUTOSAVE_PATH = `${diff.targetDir}/.revu.json`
 const EXPORT_PATH = `${diff.targetDir}/revu-review.md`
 
-const comments = new Map<string, string>()
+const comments = new Map<string, Annotation>()
 const { prompt } = await loadComments(AUTOSAVE_PATH, comments)
 const savedPrompt = prompt ?? DEFAULT_EXPORT_PROMPT
 

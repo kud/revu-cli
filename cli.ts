@@ -15,6 +15,8 @@ Keys:
   shift+↑↓                      Select range
   ↵                             Annotate line / range
   d                             Delete annotation on current line
+  v                             Cycle severity (blocker / concern / nitpick)
+  t                             Cycle triage status (open / accepted / dismissed / resolved)
   ] [                           Jump to next / prev hunk
   c C                           Jump to next / prev annotation
   n p                           Next / prev file
