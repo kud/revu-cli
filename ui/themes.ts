@@ -427,12 +427,29 @@ export const THEMES: Theme[] = [
     },
   },
 ]
-export const buildSyntaxStyle = (t: Theme) =>
-  SyntaxStyle.fromStyles(
-    Object.fromEntries(
-      Object.entries(t.syntax).map(([k, v]) => [
-        k,
-        { fg: RGBA.fromHex(v.fg), bold: v.bold, italic: v.italic },
-      ]),
-    ),
+type BuiltStyle = { fg: RGBA; bold?: boolean; italic?: boolean }
+
+export const buildSyntaxStyle = (t: Theme) => {
+  const styles: Record<string, BuiltStyle> = Object.fromEntries(
+    Object.entries(t.syntax).map(([k, v]) => [
+      k,
+      { fg: RGBA.fromHex(v.fg), bold: v.bold, italic: v.italic },
+    ]),
   )
+  // The themes declare only 8 flat scopes, but tree-sitter emits many more
+  // (constant, tag, attribute, …). Opentui falls back only to the FIRST dotted
+  // segment (type.builtin → type), so any *base* scope we don't define renders
+  // as the plain default fg — which washes out JSX/TSX, where component names
+  // are captured as `constant` and tags/attributes dominate. Alias the common
+  // missing bases onto each theme's own palette so their children inherit too.
+  const alias = (name: string, from: string) => {
+    const src = styles[from]
+    if (src && !styles[name]) styles[name] = src
+  }
+  alias("constant", "type") // JSX component names, enum members, true/false/null
+  alias("constructor", "type") // class / JSX element constructors
+  alias("tag", "keyword") // HTML / JSX tags
+  alias("attribute", "function") // HTML / JSX attribute names
+  alias("property", "function") // object keys, member access
+  return SyntaxStyle.fromStyles(styles)
+}

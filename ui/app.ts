@@ -215,21 +215,45 @@ export const runApp = async (ctx: AppContext) => {
   const BADGE_WIDTH = prMode ? 2 : 0
   const treeAvail = TREE_WIDTH - 4 - BADGE_WIDTH
 
+  const splitFilePath = (file: string) => {
+    const i = file.lastIndexOf("/")
+    if (i === -1) return { base: file, parent: "" }
+    const dir = file.slice(0, i)
+    return {
+      base: file.slice(i + 1),
+      parent: dir.slice(dir.lastIndexOf("/") + 1),
+    }
+  }
+
+  // Basename-first tree label: the filename is the meaningful, unique part in a
+  // flat list (many index.ts / styles.ts / types.ts across folders), so show it
+  // in full and spend any leftover width on the immediate parent dir rather than
+  // left-truncating the whole path — which hid which file was which.
+  const treeLabelParts = (file: string) => {
+    const { base, parent } = splitFilePath(file)
+    if (base.length >= treeAvail)
+      return { base: "…" + base.slice(-(treeAvail - 1)), parent: "" }
+    if (!parent) return { base, parent: "" }
+    const remaining = treeAvail - base.length - 1 // 1 for the separating space
+    if (parent.length <= remaining) return { base, parent } // fits whole
+    // Only truncate the parent if ≥3 real chars survive — a bare "…r" is noise.
+    if (remaining >= 4)
+      return { base, parent: "…" + parent.slice(-(remaining - 1)) }
+    return { base, parent: "" }
+  }
+
   const fileTextMap = new Map<string, TextRenderable>()
   for (const fd of fileDiffs) {
-    const label =
-      fd.file.length > treeAvail
-        ? "…" + fd.file.slice(-(treeAvail - 1))
-        : fd.file
+    const { base, parent } = treeLabelParts(fd.file)
     const badge = prMode ? `${fd.status ?? "M"} ` : ""
-    const t = new TextRenderable(renderer, {
-      content: `  ${badge}${label}`,
+    const text = new TextRenderable(renderer, {
+      content: `  ${badge}${base}${parent ? ` ${parent}` : ""}`,
       width: "100%",
       height: 1,
     })
-    t.fg = theme().treeInactive
-    fileTextMap.set(fd.file, t)
-    fileListBox.add(t)
+    text.fg = theme().treeInactive
+    fileTextMap.set(fd.file, text)
+    fileListBox.add(text)
   }
   fileTreeBox.add(treeHeaderText)
   fileTreeBox.add(fileListBox)
@@ -749,8 +773,8 @@ export const runApp = async (ctx: AppContext) => {
     const total = totalContentLines()
     const posStr = focusedPanel === "diff" ? `  ·  ${lineIdx}/${total}` : ""
     const orphanStr =
-      orphanCount > 0 ? fg("#f07178")(`  ⚠ ${orphanCount} stale`) : ""
-    headerText.content = t` ${fg(theme().headerFg)("{revu}")} ${dim("·")}  ${modeStr}${shortFile}${posStr}  ${dim("·")}  ${count} ${count === 1 ? "note" : "notes"}${orphanStr}`
+      orphanCount > 0 ? fg("#f07178")(`  ▲ ${orphanCount} stale`) : ""
+    headerText.content = t` ${fg(theme().headerFg)("{ revu }")} ${dim("·")}  ${modeStr}${shortFile}${posStr}  ${dim("·")}  ${count} ${count === 1 ? "note" : "notes"}${orphanStr}`
     headerText.fg = theme().headerFg
     updateTreeHeader()
   }
@@ -774,8 +798,8 @@ export const runApp = async (ctx: AppContext) => {
         k.startsWith(`${file}:`),
       )
       const isActive = files[fileIndex] === file
-      const label =
-        file.length > treeAvail ? "…" + file.slice(-(treeAvail - 1)) : file
+      const { base, parent } = treeLabelParts(file)
+      const parentChunk = parent ? dim(` ${parent}`) : ""
       const status = fileDiffs.find((f) => f.file === file)?.status ?? "M"
       const isFocusedActive = isActive && treeActive
       const prefix = isFocusedActive ? "❯ " : isActive ? "▶ " : "  "
@@ -783,8 +807,8 @@ export const runApp = async (ctx: AppContext) => {
       const dotColor = topSeverity ? severityColor(topSeverity) : th.treeComment
       const commentMark = hasComments ? fg(dotColor)(" ●") : ""
       text.content = prMode
-        ? t`${prefix}${fg(badgeColor(status, th))(status)} ${label}${commentMark}`
-        : t`${prefix}${label}${commentMark}`
+        ? t`${prefix}${fg(badgeColor(status, th))(status)} ${base}${parentChunk}${commentMark}`
+        : t`${prefix}${base}${parentChunk}${commentMark}`
       text.fg = isFocusedActive
         ? th.treeFocused
         : isActive

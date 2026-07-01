@@ -20,12 +20,21 @@ export const splitByFile = (raw: string): FileDiff[] => {
 }
 
 export const getFiletype = (filename: string): string | undefined => {
-  const ext = filename.split(".").pop()?.toLowerCase() ?? ""
+  const lower = filename.toLowerCase()
+  // Jest/Vitest snapshots hold JS/JSX source in a `.snap` file — highlight them
+  // as TypeScript so the diff isn't a colourless wall of text.
+  if (lower.endsWith(".snap")) return "typescript"
+  const ext = lower.split(".").pop() ?? ""
   const map: Record<string, string> = {
     ts: "typescript",
     tsx: "typescript",
+    mts: "typescript",
+    cts: "typescript",
     js: "javascript",
     jsx: "javascript",
+    mjs: "javascript",
+    cjs: "javascript",
+    mdx: "markdown",
     py: "python",
     rb: "ruby",
     go: "go",
