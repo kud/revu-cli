@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ---
 
+## 1.1.2 — 2026-07-01
+
+### Highlights
+
+- Diffs now render more file types correctly: Jest/Vitest `.snap` files highlight as TypeScript instead of showing as plain text, and `.mts`, `.cts`, `.mjs`, `.cjs`, and `.mdx` extensions are now recognised. ([a39c194](https://github.com/kud/revu-cli/commit/a39c194f4e95d0fc6d0a3bb28ef6c69e5f01c262))
+- JSX/TSX diffs no longer wash out to a flat colour — component names, tags, and attributes now inherit a sensible colour from the active theme instead of falling back to plain default text. ([a39c194](https://github.com/kud/revu-cli/commit/a39c194f4e95d0fc6d0a3bb28ef6c69e5f01c262))
+- The file tree now leads with the filename and shows the parent folder second, instead of left-truncating the full path — much easier to tell apart same-named files (`index.ts`, `types.ts`) living in different folders. ([a39c194](https://github.com/kud/revu-cli/commit/a39c194f4e95d0fc6d0a3bb28ef6c69e5f01c262))
+- Minor header polish: the app title now reads `{ revu }` with breathing room, and the stale-annotation warning uses a `▲` glyph instead of `⚠`. ([a39c194](https://github.com/kud/revu-cli/commit/a39c194f4e95d0fc6d0a3bb28ef6c69e5f01c262))
+
+---
+
 ## 1.1.1 — 2026-07-01
 
 ### Fixed
