@@ -7,6 +7,11 @@ dist
 *.tgz
 revu-bin
 
+# revu review artifacts (autosave + exports)
+.revu.json
+revu-review.md
+revu-review.json
+
 # code coverage
 coverage
 *.lcov

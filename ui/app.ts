@@ -20,9 +20,11 @@ import {
   dim,
   StyledText,
 } from "@opentui/core"
+import { watch as fsWatch } from "fs"
 import {
   type FileDiff,
   getFiletype,
+  gatherDiff,
   isContentLine,
   rawToContentIdx as rawToContentIdxIn,
   nextContentRawIdx as nextContentRawIdxIn,
@@ -34,6 +36,7 @@ import {
   type Annotation,
   type Severity,
   commentKey,
+  parseCommentKey,
   cycleSeverity,
   cycleStatus,
   isLineCommented as isLineCommentedIn,
@@ -58,6 +61,9 @@ export interface AppContext {
   diffView: "unified" | "split"
   autosavePath: string
   exportPath: string
+  watch: boolean
+  rawTarget: string
+  targetDir: string
 }
 
 export const runApp = async (ctx: AppContext) => {
@@ -71,8 +77,10 @@ export const runApp = async (ctx: AppContext) => {
     comments,
   } = ctx
   let { themeIndex, diffView, savedPrompt } = ctx
+  const { watch, rawTarget, targetDir } = ctx
   const AUTOSAVE_PATH = ctx.autosavePath
   const EXPORT_PATH = ctx.exportPath
+  let orphanCount = 0
 
   // ── App state ─────────────────────────────────────────────────────────────────
 
@@ -704,7 +712,9 @@ export const runApp = async (ctx: AppContext) => {
     const lineIdx = currentContentLineIdx()
     const total = totalContentLines()
     const posStr = focusedPanel === "diff" ? `  ·  ${lineIdx}/${total}` : ""
-    headerText.content = t` ${fg(theme().headerFg)("{revu}")} ${dim("·")}  ${modeStr}${shortFile}${posStr}  ${dim("·")}  ${count} ${count === 1 ? "note" : "notes"}`
+    const orphanStr =
+      orphanCount > 0 ? fg("#f07178")(`  ⚠ ${orphanCount} stale`) : ""
+    headerText.content = t` ${fg(theme().headerFg)("{revu}")} ${dim("·")}  ${modeStr}${shortFile}${posStr}  ${dim("·")}  ${count} ${count === 1 ? "note" : "notes"}${orphanStr}`
     headerText.fg = theme().headerFg
     updateTreeHeader()
   }
@@ -1192,4 +1202,91 @@ export const runApp = async (ctx: AppContext) => {
   cursorLine = firstContentRawIdx()
   prevCursorLine = cursorLine
   applyCommentColorsForCurrentFile()
+
+  // ── Watch mode ─────────────────────────────────────────────────────────────
+
+  // All (side:lineNum) pairs that currently exist as content in a file's diff.
+  const liveLineSet = (fd: FileDiff): Set<string> => {
+    const set = new Set<string>()
+    for (let i = 0; i < fd.lines.length; i++) {
+      const info = diffLineToFileLineNumIn(fd.lines, i)
+      if (info) set.add(`${info.side}:${info.lineNum}`)
+    }
+    return set
+  }
+
+  // Count annotations whose anchor line no longer exists in the current diff.
+  // These are preserved (never dropped) but flagged as stale in the header.
+  const computeOrphans = () => {
+    const sets = new Map<string, Set<string>>()
+    let count = 0
+    for (const key of comments.keys()) {
+      const { file, side, startLine } = parseCommentKey(key)
+      let set = sets.get(file)
+      if (!set) {
+        const fd = fileDiffs.find((f) => f.file === file)
+        set = fd ? liveLineSet(fd) : new Set<string>()
+        sets.set(file, set)
+      }
+      if (!set.has(`${side}:${startLine}`)) count++
+    }
+    orphanCount = count
+  }
+
+  // Swap in a freshly-gathered diff and refresh the view, keeping the cursor on
+  // the same file where possible. Annotations (keyed by file:side:line) are
+  // preserved untouched; computeOrphans flags any that no longer anchor.
+  const applyReload = (newFileDiffs: FileDiff[], newFiles: string[]) => {
+    if (newFileDiffs.length === 0) return
+    const currentFile = files[fileIndex]
+    fileDiffs.length = 0
+    fileDiffs.push(...newFileDiffs)
+    files.length = 0
+    files.push(...newFiles)
+    const idx = currentFile ? files.indexOf(currentFile) : -1
+    fileIndex = idx >= 0 ? idx : Math.min(fileIndex, files.length - 1)
+    if (fileIndex < 0) fileIndex = 0
+    diffRenderable.diff = currentFileDiff().raw
+    diffRenderable.filetype = getFiletype(currentFileDiff().file)
+    if (
+      cursorLine >= currentFileDiff().lines.length ||
+      !isContentLine(currentFileDiff().lines[cursorLine] ?? "")
+    ) {
+      cursorLine = firstContentRawIdx()
+    }
+    prevCursorLine = cursorLine
+    computeOrphans()
+    updateHeader()
+    updateFileTree()
+    updateFooter()
+    applyCommentColorsForCurrentFile()
+  }
+
+  // Flag any annotations that are already stale on launch.
+  computeOrphans()
+  updateHeader()
+
+  if (watch) {
+    let debounce: ReturnType<typeof setTimeout> | null = null
+    const reloadDiff = async () => {
+      try {
+        const fresh = await gatherDiff({ rawTarget, againstBranch })
+        applyReload(fresh.fileDiffs, fresh.files)
+      } catch {
+        // No diff (changes reverted) or a transient git state — keep the
+        // current view rather than tearing it down.
+      }
+    }
+    try {
+      fsWatch(targetDir, { recursive: true }, (_event, filename) => {
+        const name = filename?.toString() ?? ""
+        // Ignore revu's own writes and git internals to avoid reload loops.
+        if (name.includes(".revu.json") || name.startsWith(".git")) return
+        if (debounce) clearTimeout(debounce)
+        debounce = setTimeout(() => void reloadDiff(), 200)
+      })
+    } catch {
+      // Filesystem watching unavailable — degrade to a static review.
+    }
+  }
 }

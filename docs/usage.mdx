@@ -24,6 +24,26 @@ Pass a path to scope the review to a single file, or `--against <branch>` to
 review every commit between that branch and `HEAD` — the typical pull-request
 workflow.
 
+### Watch mode
+
+revu keeps the diff **live by default**: it re-runs the diff whenever the working
+tree changes (debounced), so as you (or an agent) edit files, the review updates
+without quitting. Your annotations are kept across reloads — if an annotated line
+no longer exists in the refreshed diff, it is flagged as `⚠ N stale` in the
+header rather than dropped.
+
+```sh
+# Live reload is on by default
+revu
+
+# Turn it off for a static, one-shot review
+revu --no-watch
+```
+
+Pass `--no-watch` to disable it — handy for a quick annotate-and-export pass, or
+on very large repos where a recursive file watch is costly. (Adding or removing
+whole files mid-watch may need a restart to refresh the file tree.)
+
 ## 📝 Annotating
 
 Move the cursor with `↑↓` or `j k`. Press `↵` to attach a note to the current
@@ -70,12 +90,39 @@ revu --export --format json
 
 # Custom destination
 revu --export --format json --out review.json
+
+# Stream to stdout (no file) — ideal for piping to an agent
+revu --export --format json --out -
 ```
 
 Headless export reads the annotations from `.revu.json`, so run it after a
 review session. The JSON form emits one entry per annotation with its file,
 line range, side, severity, status, source, text, and the captured code range —
-ready to feed back to an agent. It works in `--against` mode too.
+ready to feed back to an agent. It works in `--against` mode too. Pass `--out -`
+to write to stdout instead of a file (the status line then goes to stderr, so
+stdout stays pure JSON).
+
+## 🧑‍💻 Reviewing side-by-side with an AI agent
+
+revu pairs naturally with an AI coding agent (like Claude Code) in a split
+terminal — agent on the left, revu on the right:
+
+1. The agent writes code on the left; with live reload on (the default), the
+   diff on the right updates as it works.
+2. You annotate lines in revu as you read — each note autosaves to `.revu.json`
+   instantly.
+3. When you're ready, tell the agent something like _"address my revu
+   annotations"_. It grabs them with:
+
+   ```sh
+   revu --export --format json --out -
+   ```
+
+   which streams every annotation — with its code range, severity, and status —
+   for the agent to act on. The agent can also seed its own findings back with
+   `revu --import` (see below), closing the loop in both directions.
+
+No server, no protocol — the shared `.revu.json` file is the whole channel.
 
 ## 🔀 Pushing to a GitHub PR
 

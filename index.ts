@@ -27,6 +27,7 @@ const {
   importPath,
   pushPr,
   dryRun,
+  watch,
 } = parseArgs(process.argv.slice(2))
 
 if (help) {
@@ -92,9 +93,6 @@ if (exportMode) {
     )
     process.exit(1)
   }
-  const outPath =
-    out ??
-    (format === "json" ? `${diff.targetDir}/revu-review.json` : EXPORT_PATH)
   const content =
     format === "json"
       ? JSON.stringify(
@@ -103,6 +101,16 @@ if (exportMode) {
           2,
         ) + "\n"
       : buildReviewMarkdown(comments, diff.fileDiffs, savedPrompt)
+  // `--out -` streams to stdout so an agent can grab the review in one command
+  // (e.g. `revu --export --format json --out -`); the confirmation goes to
+  // stderr to keep stdout pure.
+  if (out === "-") {
+    process.stdout.write(content.endsWith("\n") ? content : content + "\n")
+    process.exit(0)
+  }
+  const outPath =
+    out ??
+    (format === "json" ? `${diff.targetDir}/revu-review.json` : EXPORT_PATH)
   await Bun.write(outPath, content)
   console.log(`Exported ${comments.size} annotation(s) to ${outPath}`)
   process.exit(0)
@@ -123,4 +131,7 @@ await runApp({
   diffView,
   autosavePath: AUTOSAVE_PATH,
   exportPath: EXPORT_PATH,
+  watch,
+  rawTarget,
+  targetDir: diff.targetDir,
 })

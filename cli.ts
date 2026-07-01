@@ -13,10 +13,12 @@ Usage:
 
 Options:
   -h, --help                    Show this help
+  --no-watch                    Disable live diff reload (watch is on by default)
   --import <file.json>          Load annotations (tagged source: agent) for triage
   --export                      Headless export — no TUI (for CI / agents)
   --format <md|json>            Export format (default: md)
-  --out <path>                  Export destination (default: revu-review.md / .json)
+  --out <path>                  Export destination ('-' for stdout;
+                                default: revu-review.md / .json)
   --push-pr                     Post annotations to the current branch's GitHub PR
                                 (requires --against; no network without this flag)
   --dry-run                     With --push-pr, preview the payload without posting
@@ -51,12 +53,15 @@ export interface ParsedArgs {
   importPath: string | null
   pushPr: boolean
   dryRun: boolean
+  watch: boolean
 }
 
 export const parseArgs = (argv: string[]): ParsedArgs => {
   const help = argv.includes("--help") || argv.includes("-h")
   const pushPr = argv.includes("--push-pr")
   const dryRun = argv.includes("--dry-run")
+  // Watch is on by default for the interactive reviewer; --no-watch opts out.
+  const watch = !argv.includes("--no-watch")
   let againstBranch: string | null = null
   let exportMode = false
   let format: "md" | "json" = "md"
@@ -75,7 +80,12 @@ export const parseArgs = (argv: string[]): ParsedArgs => {
       out = argv[++i]!
     } else if (a === "--import" && argv[i + 1]) {
       importPath = argv[++i]!
-    } else if (a === "--push-pr" || a === "--dry-run") {
+    } else if (
+      a === "--push-pr" ||
+      a === "--dry-run" ||
+      a === "--watch" ||
+      a === "--no-watch"
+    ) {
       // Boolean flags handled above via argv.includes.
     } else {
       positionalArgs.push(a)
@@ -92,5 +102,6 @@ export const parseArgs = (argv: string[]): ParsedArgs => {
     importPath,
     pushPr,
     dryRun,
+    watch,
   }
 }
