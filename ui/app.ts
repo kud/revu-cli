@@ -594,13 +594,14 @@ export const runApp = async (ctx: AppContext) => {
       diffRenderable.setLineColor(contentIdx, theme().cursorBg)
     } else if (inSel) {
       diffRenderable.setLineColor(contentIdx, theme().selectionBg)
-    } else if (
-      info !== null &&
-      isLineCommented(file, info.lineNum, info.side)
-    ) {
-      diffRenderable.setLineColor(contentIdx, theme().commentedBg)
     } else {
-      diffRenderable.clearLineColor(contentIdx)
+      const key =
+        info !== null
+          ? findCommentKeyForLine(file, info.lineNum, info.side)
+          : null
+      if (key)
+        diffRenderable.setLineColor(contentIdx, lineBgFor(comments.get(key)))
+      else diffRenderable.clearLineColor(contentIdx)
     }
   }
 
@@ -637,7 +638,7 @@ export const runApp = async (ctx: AppContext) => {
     if (focusedPanel === "tree") {
       footerText.content = t`  ${hi("↑↓")} files${sep}${hi("↵")} open${sep}${hi("e")} export → revu-review.md${sep}${hi("s")} settings${sep}${hi("q")} quit`
     } else {
-      footerText.content = t`  ${hi("↑↓")} move${sep}${hi("shift+↑↓")} select${sep}${hi("↵")} annotate${sep}${hi("e")} export → revu-review.md${sep}${hi("q")} quit`
+      footerText.content = t`  ${hi("↑↓")} move${sep}${hi("shift+↑↓")} select${sep}${hi("↵")} annotate${sep}${hi("v/t")} triage${sep}${hi("e")} export${sep}${hi("q")} quit`
     }
     footerText.fg = theme().mutedFg
   }
@@ -648,6 +649,41 @@ export const runApp = async (ctx: AppContext) => {
       : s === "concern"
         ? theme().commentMark
         : theme().mutedFg
+
+  // Subtle line-background tints (dark so code stays readable). Tune to taste.
+  const SEVERITY_BLOCKER_BG = "#3a1e1e"
+  const SEVERITY_NITPICK_BG = "#242a33"
+  const TRIAGED_LINE_BG = "#232228"
+
+  // Background for a commented line, driven by triage: dismissed/resolved recede,
+  // otherwise blocker/nitpick get their own tint (concern & unset keep the amber).
+  const lineBgFor = (ann: Annotation | undefined): string => {
+    if (!ann) return theme().commentedBg
+    if (ann.status === "dismissed" || ann.status === "resolved")
+      return TRIAGED_LINE_BG
+    if (ann.severity === "blocker") return SEVERITY_BLOCKER_BG
+    if (ann.severity === "nitpick") return SEVERITY_NITPICK_BG
+    return theme().commentedBg
+  }
+
+  // Most severe annotation on a file, for the tree dot colour.
+  const SEVERITY_RANK: Record<Severity, number> = {
+    blocker: 3,
+    concern: 2,
+    nitpick: 1,
+  }
+  const fileTopSeverity = (file: string): Severity | null => {
+    let top: Severity | null = null
+    let rank = 0
+    for (const [key, ann] of comments) {
+      if (parseCommentKey(key).file !== file) continue
+      if (ann.severity && SEVERITY_RANK[ann.severity] > rank) {
+        rank = SEVERITY_RANK[ann.severity]
+        top = ann.severity
+      }
+    }
+    return top
+  }
 
   const updateCommentPreview = () => {
     if (mode !== "normal" || focusedPanel !== "diff") {
@@ -743,7 +779,9 @@ export const runApp = async (ctx: AppContext) => {
       const status = fileDiffs.find((f) => f.file === file)?.status ?? "M"
       const isFocusedActive = isActive && treeActive
       const prefix = isFocusedActive ? "❯ " : isActive ? "▶ " : "  "
-      const commentMark = hasComments ? fg(th.treeComment)(" ●") : ""
+      const topSeverity = hasComments ? fileTopSeverity(file) : null
+      const dotColor = topSeverity ? severityColor(topSeverity) : th.treeComment
+      const commentMark = hasComments ? fg(dotColor)(" ●") : ""
       text.content = prMode
         ? t`${prefix}${fg(badgeColor(status, th))(status)} ${label}${commentMark}`
         : t`${prefix}${label}${commentMark}`
@@ -781,10 +819,14 @@ export const runApp = async (ctx: AppContext) => {
           diffRenderable.setLineColor(contentIdx, theme().cursorBg)
         } else if (inSel) {
           diffRenderable.setLineColor(contentIdx, theme().selectionBg)
-        } else if (isLineCommented(file, lineNum, side)) {
-          diffRenderable.setLineColor(contentIdx, theme().commentedBg)
         } else {
-          diffRenderable.clearLineColor(contentIdx)
+          const key = findCommentKeyForLine(file, lineNum, side)
+          if (key)
+            diffRenderable.setLineColor(
+              contentIdx,
+              lineBgFor(comments.get(key)),
+            )
+          else diffRenderable.clearLineColor(contentIdx)
         }
         if (isRemoved) oldCounter++
         else {
