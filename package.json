@@ -43,6 +43,7 @@
     "type": "git",
     "url": "https://github.com/kud/revu-cli"
   },
+  "homepage": "https://kud.io/projects/revu-cli",
   "license": "MIT",
   "keywords": [
     "diff",
