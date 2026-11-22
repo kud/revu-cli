@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    groups:
+      minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      major:
+        patterns: ["*"]
+        update-types: ["major"]
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/npm-packages/darwin-arm64"
+      - "/npm-packages/darwin-x64"
+      - "/npm-packages/linux-arm64"
+      - "/npm-packages/linux-x64"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+    groups:
+      minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      major:
+        patterns: ["*"]
+        update-types: ["major"]
