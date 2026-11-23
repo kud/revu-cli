@@ -267,7 +267,7 @@ export const runApp = async (ctx: AppContext) => {
     addedBg: RGBA.fromValues(0, 0, 0, 0),
     removedBg: theme().removedBg,
     contextBg: RGBA.fromValues(0, 0, 0, 0),
-    syntaxStyle: buildSyntaxStyle(theme()),
+    syntaxStyle: buildSyntaxStyle(theme(), renderer.nativeScene),
     treeSitterClient: getTreeSitterClient(),
   })
 
@@ -910,7 +910,7 @@ export const runApp = async (ctx: AppContext) => {
     diffRenderable.addedBg = RGBA.fromValues(0, 0, 0, 0)
     diffRenderable.removedBg = t.removedBg
     diffRenderable.contextBg = RGBA.fromValues(0, 0, 0, 0)
-    diffRenderable.syntaxStyle = buildSyntaxStyle(t)
+    diffRenderable.syntaxStyle = buildSyntaxStyle(t, renderer.nativeScene)
     headerText.fg = t.headerFg
     treeHeaderText.fg = focusedPanel === "tree" ? t.treeFocused : t.treeHeader
     treeHeaderText.backgroundColor = focusedPanel === "tree" ? t.headerBg : t.bg

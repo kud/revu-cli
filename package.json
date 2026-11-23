@@ -13,10 +13,10 @@
   "scripts": {
     "dev": "bun --hot index.ts",
     "start": "bun index.ts",
-    "build": "bun build --compile --minify index.ts --outfile revu-bin",
-    "build:darwin-arm64": "bun build --compile --minify --target=bun-darwin-arm64 index.ts --outfile npm-packages/darwin-arm64/revu-bin",
-    "build:linux-x64": "bun build --compile --minify --target=bun-linux-x64 index.ts --outfile npm-packages/linux-x64/revu-bin",
-    "build:linux-arm64": "bun build --compile --minify --target=bun-linux-arm64 index.ts --outfile npm-packages/linux-arm64/revu-bin",
+    "build": "bun build --compile --minify --external @opentui/core-linux-x64-musl --external @opentui/core-linux-arm64-musl index.ts --outfile revu-bin",
+    "build:darwin-arm64": "bun build --compile --minify --external @opentui/core-linux-x64-musl --external @opentui/core-linux-arm64-musl --target=bun-darwin-arm64 index.ts --outfile npm-packages/darwin-arm64/revu-bin",
+    "build:linux-x64": "bun build --compile --minify --external @opentui/core-linux-x64-musl --external @opentui/core-linux-arm64-musl --target=bun-linux-x64 index.ts --outfile npm-packages/linux-x64/revu-bin",
+    "build:linux-arm64": "bun build --compile --minify --external @opentui/core-linux-x64-musl --external @opentui/core-linux-arm64-musl --target=bun-linux-arm64 index.ts --outfile npm-packages/linux-arm64/revu-bin",
     "build:all": "bun run build:darwin-arm64 && bun run build:linux-x64 && bun run build:linux-arm64",
     "bump:patch": "bun scripts/bump.ts patch",
     "bump:minor": "bun scripts/bump.ts minor",
@@ -26,9 +26,9 @@
     "@kud/revu-cli-darwin-arm64": "1.1.2",
     "@kud/revu-cli-linux-x64": "1.1.2",
     "@kud/revu-cli-linux-arm64": "1.1.2",
-    "@opentui/core-darwin-arm64": "0.1.96",
-    "@opentui/core-linux-arm64": "0.1.96",
-    "@opentui/core-linux-x64": "0.1.96"
+    "@opentui/core-darwin-arm64": "0.8.3",
+    "@opentui/core-linux-arm64": "0.8.3",
+    "@opentui/core-linux-x64": "0.8.3"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -37,10 +37,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@opentui/core": "0.1.95"
-  },
-  "overrides": {
-    "diff": "^8.0.3"
+    "@opentui/core": "0.8.3"
   },
   "repository": {
     "type": "git",

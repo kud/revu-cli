@@ -35,7 +35,7 @@ jobs:
         run: bun install
 
       - name: Build binary
-        run: bun build --compile --minify index.ts --outfile ${{ matrix.pkg_dir }}/revu-bin
+        run: bun build --compile --minify --external @opentui/core-linux-x64-musl --external @opentui/core-linux-arm64-musl index.ts --outfile ${{ matrix.pkg_dir }}/revu-bin
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v7
