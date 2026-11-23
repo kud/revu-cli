@@ -26,7 +26,7 @@ run = "zsh {{config_root}}/scripts/demo.sh --upload"
 description = "Upload assets/demo.cast to asciinema.org"
 
 [tasks.build]
-run = "bun build index.ts --compile --minify --outfile revu-bin"
+run = "bun build index.ts --compile --minify --external @opentui/core-linux-x64-musl --external @opentui/core-linux-arm64-musl --outfile revu-bin"
 description = "Compile revu to a standalone binary"
 
 [tasks."bump:patch"]

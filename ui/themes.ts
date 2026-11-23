@@ -1,6 +1,6 @@
 // Colour themes and syntax styling.
 
-import { RGBA, SyntaxStyle } from "@opentui/core"
+import { RGBA, SyntaxStyle, type NativeResourceOwner } from "@opentui/core"
 
 export interface Theme {
   name: string
@@ -429,7 +429,7 @@ export const THEMES: Theme[] = [
 ]
 type BuiltStyle = { fg: RGBA; bold?: boolean; italic?: boolean }
 
-export const buildSyntaxStyle = (t: Theme) => {
+export const buildSyntaxStyle = (t: Theme, owner: NativeResourceOwner) => {
   const styles: Record<string, BuiltStyle> = Object.fromEntries(
     Object.entries(t.syntax).map(([k, v]) => [
       k,
@@ -451,5 +451,5 @@ export const buildSyntaxStyle = (t: Theme) => {
   alias("tag", "keyword") // HTML / JSX tags
   alias("attribute", "function") // HTML / JSX attribute names
   alias("property", "function") // object keys, member access
-  return SyntaxStyle.fromStyles(styles)
+  return SyntaxStyle.fromStyles(styles, owner)
 }
