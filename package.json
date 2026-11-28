@@ -14,6 +14,7 @@
     "dev": "bun --hot index.ts",
     "start": "bun index.ts",
     "build": "bun build --compile --minify index.ts --outfile revu-bin",
+    "test": "bun test test/",
     "build:darwin-arm64": "bun build --compile --minify --target=bun-darwin-arm64 index.ts --outfile npm-packages/darwin-arm64/revu-bin",
     "build:linux-x64": "bun build --compile --minify --target=bun-linux-x64 index.ts --outfile npm-packages/linux-x64/revu-bin",
     "build:linux-arm64": "bun build --compile --minify --target=bun-linux-arm64 index.ts --outfile npm-packages/linux-arm64/revu-bin",
