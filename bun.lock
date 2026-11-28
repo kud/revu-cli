@@ -11,9 +11,9 @@
         "@types/bun": "latest",
       },
       "optionalDependencies": {
-        "@kud/revu-cli-darwin-arm64": "1.1.0",
-        "@kud/revu-cli-linux-arm64": "1.1.0",
-        "@kud/revu-cli-linux-x64": "1.1.0",
+        "@kud/revu-cli-darwin-arm64": "1.1.2",
+        "@kud/revu-cli-linux-arm64": "1.1.2",
+        "@kud/revu-cli-linux-x64": "1.1.2",
         "@opentui/core-darwin-arm64": "0.1.96",
         "@opentui/core-linux-arm64": "0.1.96",
         "@opentui/core-linux-x64": "0.1.96",
@@ -22,6 +22,9 @@
         "typescript": "^5",
       },
     },
+  },
+  "overrides": {
+    "diff": "^8.0.3",
   },
   "packages": {
     "@dimforge/rapier2d-simd-compat": ["@dimforge/rapier2d-simd-compat@0.17.3", "", {}, "sha512-bijvwWz6NHsNj5e5i1vtd3dU2pDhthSaTUZSh14DUGGKJfw8eMnlWZsxwHBxB/a3AXVNDjL9abuHw1k9FGR+jg=="],
@@ -82,11 +85,11 @@
 
     "@jimp/utils": ["@jimp/utils@1.6.0", "", { "dependencies": { "@jimp/types": "1.6.0", "tinycolor2": "^1.6.0" } }, "sha512-gqFTGEosKbOkYF/WFj26jMHOI5OH2jeP1MmC/zbK6BF6VJBf8rIC5898dPfSzZEbSA0wbbV5slbntWVc5PKLFA=="],
 
-    "@kud/revu-cli-darwin-arm64": ["@kud/revu-cli-darwin-arm64@1.1.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-7ijXHQH+UDV1DtvV83oCasupPXoaBtOyGE7Ir6KRODzUzE8IVX9CUfYNms7ARmDu83EHrS1US6qYtFcvjqnvJg=="],
+    "@kud/revu-cli-darwin-arm64": ["@kud/revu-cli-darwin-arm64@1.1.2", "", { "os": "darwin", "cpu": "arm64" }, "sha512-0NuwCOpKRbJ/bmlo6sx9IpfZrMsS2btX09a0lE1HgxYuY+q65H6lEmAUv/Av1flL5YM1nP1iI1Ey1KxrG0qvJA=="],
 
-    "@kud/revu-cli-linux-arm64": ["@kud/revu-cli-linux-arm64@1.1.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-FNjYs1JAniVAPt/xz0rdUmoEsXO7AOfvcd8UTnKkVuWjwzN0JpyctMWlQBGTWeLJAuYQPJPIkPPqt1GH4j3IGg=="],
+    "@kud/revu-cli-linux-arm64": ["@kud/revu-cli-linux-arm64@1.1.2", "", { "os": "linux", "cpu": "arm64" }, "sha512-F66L8qz+pjLN77kvLlK7LQZ2gf327gv1PSMWsfEJcM8h/gGK0rZS51yhIGY/0o8zAchzKryWOR/rdX4yZXohIA=="],
 
-    "@kud/revu-cli-linux-x64": ["@kud/revu-cli-linux-x64@1.1.0", "", { "os": "linux", "cpu": "x64" }, "sha512-MvSagcwLmt2ZNoXLOVqvYgAOUiXcUjbjWyfe046LeQist1xaUGx4Y0CPiuvyWJ1J+i6AVfwt7mry8DiPOUwMpw=="],
+    "@kud/revu-cli-linux-x64": ["@kud/revu-cli-linux-x64@1.1.2", "", { "os": "linux", "cpu": "x64" }, "sha512-j3sKo9IXshRWFbUxO8feedNn/13tK2ArNiu6TgCyC2EOQEHBKuzJB4pyU7aiMXPFKezbtehCrPsMKZVhM9B1lg=="],
 
     "@opentui/core": ["@opentui/core@0.1.95", "", { "dependencies": { "bun-ffi-structs": "0.1.2", "diff": "8.0.2", "jimp": "1.6.0", "marked": "17.0.1", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@dimforge/rapier2d-simd-compat": "^0.17.3", "@opentui/core-darwin-arm64": "0.1.95", "@opentui/core-darwin-x64": "0.1.95", "@opentui/core-linux-arm64": "0.1.95", "@opentui/core-linux-x64": "0.1.95", "@opentui/core-win32-arm64": "0.1.95", "@opentui/core-win32-x64": "0.1.95", "bun-webgpu": "0.1.5", "planck": "^1.4.2", "three": "0.177.0" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-Ha73I+PPSy6Jk8CTZgdGRHU+nnmrPAs7m6w0k6ge1/kWbcNcZB0lY67sWQMdoa6bSINQMNWg7SjbNCC9B/0exg=="],
 
@@ -136,7 +139,7 @@
 
     "bun-webgpu-win32-x64": ["bun-webgpu-win32-x64@0.1.6", "", { "os": "win32", "cpu": "x64" }, "sha512-MHSFAKqizISb+C5NfDrFe3g0Al5Njnu0j/A+oO2Q+bIWX+fUYjBSowiYE1ZXJx65KuryuB+tiM7Qh6cQbVvkEg=="],
 
-    "diff": ["diff@8.0.2", "", {}, "sha512-sSuxWU5j5SR9QQji/o2qMvqRNYRDOcBTgsJ/DeCf4iSN4gW+gNMXM7wFIP+fdXZxoNiAnHUTGjCr+TSWXdRDKg=="],
+    "diff": ["diff@8.0.4", "", {}, "sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw=="],
 
     "event-target-shim": ["event-target-shim@5.0.1", "", {}, "sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ=="],
 
